@@ -1,0 +1,28 @@
+# Python bytecode & cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+.env
+
+# Vercel Build Artifacts
+.vercel/
+
+# SSL Certificates & Local Keys
+*.crt
+*.key
+
+# IDE Configs
+.vscode/
+.idea/
+.gemini/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
