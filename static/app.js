@@ -36,6 +36,49 @@ document.addEventListener('DOMContentLoaded', () => {
     const userSearchInput = document.getElementById('userSearchInput');
     const filterPills = document.querySelectorAll('.filter-pill');
 
+    // Admin Navigation Scroller Tabs
+    const adminTabBtns = document.querySelectorAll('#adminTabNavigation .admin-tab-btn');
+    const adminTabSections = {
+        'user-directory': document.getElementById('adminUserDirectorySection'),
+        'attendance-reports': document.getElementById('adminAttendanceReportsSection'),
+        'report-generation': document.getElementById('adminReportGenSection')
+    };
+
+    function switchAdminTab(targetTab) {
+        if (!adminTabBtns.length) return;
+        adminTabBtns.forEach(btn => {
+            if (btn.dataset.adminTab === targetTab) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        Object.keys(adminTabSections).forEach(key => {
+            const sectionEl = adminTabSections[key];
+            if (!sectionEl) return;
+            if (targetTab === 'all' || key === targetTab) {
+                sectionEl.classList.remove('hidden');
+            } else {
+                sectionEl.classList.add('hidden');
+            }
+        });
+
+        // Auto-refresh data when tabs are activated
+        if (targetTab === 'attendance-reports' || targetTab === 'all' || targetTab === 'report-generation') {
+            if (typeof fetchAdminAttendance === 'function') fetchAdminAttendance();
+        }
+        if (targetTab === 'user-directory' || targetTab === 'all') {
+            if (typeof loadAdminUsers === 'function') loadAdminUsers();
+        }
+    }
+
+    if (adminTabBtns.length) {
+        adminTabBtns.forEach(btn => {
+            btn.addEventListener('click', () => switchAdminTab(btn.dataset.adminTab));
+        });
+    }
+
     // Modal Elements
     const createUserModal = document.getElementById('createUserModal');
     const openCreateUserModalBtn = document.getElementById('openCreateUserModalBtn');
@@ -253,6 +296,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Helper Functions ---
 
+    /**
+     * Task: Update login card notice text according to selected role tab (Admin, Staff, Student).
+     */
     function updateRoleNotice() {
         if (selectedRole === 'admin') {
             roleNoticeText.textContent = 'System Administrator Login';
@@ -263,6 +309,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    /**
+     * Task: Check active authentication session status with backend API /api/me on initial page load.
+     */
     async function checkAuthSession() {
         try {
             const response = await fetch('/api/me');
@@ -278,6 +327,9 @@ document.addEventListener('DOMContentLoaded', () => {
         renderUserSession();
     }
 
+    /**
+     * Task: Render active view container (Login, Admin, Staff, Student) and update header profile pill.
+     */
     function renderUserSession() {
         Object.values(views).forEach(view => {
             if (view) {
@@ -304,9 +356,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (headerUserName) headerUserName.textContent = currentUser.full_name;
         if (headerRoleBadge) {
             headerRoleBadge.textContent = currentUser.role.toUpperCase();
-            headerRoleBadge.className = 'role-badge badge ' + 
-                (currentUser.role === 'admin' ? 'badge-admin' : 
-                 currentUser.role === 'staff' ? 'badge-staff' : 'badge-student');
+            headerRoleBadge.className = 'role-badge badge ' +
+                (currentUser.role === 'admin' ? 'badge-admin' :
+                    currentUser.role === 'staff' ? 'badge-staff' : 'badge-student');
         }
 
         if (currentUser.role === 'admin' && views.admin) {
@@ -327,7 +379,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Load Admin Directory & Stats
+    /**
+     * Task: Fetch registered user records from server, update stats counter cards, and trigger filter logic.
+     */
     async function loadAdminUsers() {
         try {
             const response = await fetch('/api/admin/users');
@@ -348,6 +402,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    /**
+     * Task: Render administrative user directory table rows and responsive mobile cards.
+     */
     function renderUserDirectory(users) {
         userTableBody.innerHTML = '';
         userMobileCardsContainer.innerHTML = '';
@@ -372,7 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const roleBadgeClass = user.role === 'staff' ? 'badge-staff' : 'badge-student';
             const rollNoText = user.role === 'student' ? (escapeHtml(user.roll_no) || '-') : '-';
-            const classSemText = user.role === 'student' 
+            const classSemText = user.role === 'student'
                 ? `${escapeHtml(user.class_name || '-')}` + (user.semester ? ` (${escapeHtml(user.semester)})` : '')
                 : '-';
 
@@ -389,6 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${escapeHtml(user.department || '-')}</td>
                 <td>${escapeHtml(user.email || '-')}</td>
                 <td>${createdDate}</td>
+                <td><span class="badge badge-active" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35); font-weight: 700;">🟢 Active</span></td>
                 <td>
                     <button class="btn-delete" data-id="${user.id}" title="Delete Account">Delete</button>
                 </td>
@@ -427,6 +485,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    /**
+     * Task: Send DELETE API request to delete specific user account after confirmation prompt.
+     */
     async function deleteUser(userId, name) {
         if (!confirm(`Are you sure you want to delete the account for "${name}"?`)) return;
 
@@ -574,18 +635,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Attempt Camera 1: Rear Environment Camera
             try {
-                await html5QrScannerInstance.start({ facingMode: "environment" }, qrConfig, onScanSuccess, () => {});
+                await html5QrScannerInstance.start({ facingMode: "environment" }, qrConfig, onScanSuccess, () => { });
             } catch (errRear) {
                 console.warn('Rear camera unavailable, trying front camera:', errRear);
                 // Attempt Camera 2: Front User Camera
                 try {
-                    await html5QrScannerInstance.start({ facingMode: "user" }, qrConfig, onScanSuccess, () => {});
+                    await html5QrScannerInstance.start({ facingMode: "user" }, qrConfig, onScanSuccess, () => { });
                 } catch (errFront) {
                     console.warn('Front camera unavailable, checking camera list:', errFront);
                     // Attempt Camera 3: Enumerate camera list
                     const cameras = await Html5Qrcode.getCameras();
                     if (cameras && cameras.length > 0) {
-                        await html5QrScannerInstance.start(cameras[0].id, qrConfig, onScanSuccess, () => {});
+                        await html5QrScannerInstance.start(cameras[0].id, qrConfig, onScanSuccess, () => { });
                     } else {
                         throw errFront;
                     }
@@ -675,12 +736,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 reject(new Error('Geolocation is not supported by this browser.'));
                 return;
             }
+            // Attempt High Accuracy GPS positioning first
             navigator.geolocation.getCurrentPosition(
                 (position) => resolve({
                     lat: position.coords.latitude,
                     lng: position.coords.longitude
                 }),
-                (err) => reject(err),
+                (highAccErr) => {
+                    console.warn('High accuracy location failed or timed out, attempting standard accuracy fallback:', highAccErr);
+                    // Fallback to standard network-assisted location
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => resolve({
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        }),
+                        (lowAccErr) => reject(highAccErr || lowAccErr),
+                        { enableHighAccuracy: false, timeout: 15000, maximumAge: 5000 }
+                    );
+                },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         });
@@ -721,7 +794,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let msg = 'Location access is required to mark attendance. Please enable location and try again.';
                 if (locErr && locErr.code === 1) {
                     msg = 'Location permission denied. Please allow location access in your browser settings to mark attendance.';
-                } else if (locErr && locErr.code === 3) {
+                } else if (locErr && (locErr.code === 2 || locErr.code === 3 || locErr.code === 8)) {
                     msg = 'Could not get your location in time. Please try again with GPS/location services turned on.';
                 }
                 showToast(msg, 'error');
@@ -854,7 +927,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             studentAllRecords = data.attendance || [];
             studentHolidays = data.holidays || [];
-            
+
             // Filter records for table
             let filteredRecords = studentAllRecords;
             if (monthFilterVal) {
@@ -899,7 +972,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const now = new Date();
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        
+
         let countP = 0;
         let countA = 0;
         let countL = 0;
@@ -1125,6 +1198,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function renderGpsBadge(r) {
+        if (r.latitude !== null && r.latitude !== undefined && r.longitude !== null && r.longitude !== undefined) {
+            const latStr = Number(r.latitude).toFixed(4);
+            const lngStr = Number(r.longitude).toFixed(4);
+            const distStr = (r.distance_meters !== null && r.distance_meters !== undefined) ? `${Math.round(r.distance_meters)}m` : '0m';
+            return `<span class="badge" title="GPS: ${r.latitude}, ${r.longitude} (${distStr} from campus)" style="background: rgba(37, 99, 235, 0.1); color: #2563EB; border: 1px solid rgba(37, 99, 235, 0.3); font-weight: 600; font-size: 0.78rem;">📍 ${latStr}, ${lngStr} (${distStr})</span>`;
+        }
+        return `<span style="color: var(--color-text-muted); font-size: 0.8rem;">-</span>`;
+    }
+
     function renderStudentAttendanceRecords(records) {
         const tbody = document.getElementById('studentAttendanceTableBody');
         const cards = document.getElementById('studentAttendanceMobileCards');
@@ -1153,10 +1236,11 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.innerHTML = records.map(r => `
                 <tr>
                     <td><strong>${escapeHtml(r.subject)}</strong></td>
-                    <td>${escapeHtml(r.class_name)}</td>
-                    <td><span class="badge badge-staff">${escapeHtml(r.session_id)}</span></td>
                     <td>${escapeHtml(r.date)}</td>
                     <td>${escapeHtml(r.time)}</td>
+                    <td><span class="badge badge-staff">${escapeHtml(r.session_id)}</span></td>
+                    <td>${escapeHtml(r.department || '-')}</td>
+                    <td>${renderGpsBadge(r)}</td>
                     <td>${renderDynamicStatusBadge(r.status)}</td>
                 </tr>
             `).join('');
@@ -1173,6 +1257,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div><strong>Class:</strong> ${escapeHtml(r.class_name)}</div>
                         <div><strong>Session:</strong> ${escapeHtml(r.session_id)}</div>
                         <div><strong>Date & Time:</strong> ${escapeHtml(r.date)} at ${escapeHtml(r.time)}</div>
+                        <div><strong>GPS Location:</strong> ${renderGpsBadge(r)}</div>
                     </div>
                 </div>
             `).join('');
@@ -1284,16 +1369,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const semester = manualAttSemester ? manualAttSemester.value : 'all';
 
         try {
-            const res = await fetch(`/api/staff/students?department=${encodeURIComponent(dept)}&semester=${encodeURIComponent(semester)}`);
-            const data = await res.json();
-            if (!res.ok) return;
+            let res = await fetch(`/api/staff/students?department=${encodeURIComponent(dept)}&semester=${encodeURIComponent(semester)}`);
+            let data = await res.json();
+            let students = (data && data.students) ? data.students : [];
 
-            const students = data.students || [];
+            if (students.length === 0 && (dept !== 'all' || semester !== 'all')) {
+                res = await fetch(`/api/staff/students?department=all&semester=all`);
+                data = await res.json();
+                students = (data && data.students) ? data.students : [];
+            }
+
             if (students.length === 0) {
                 manualAttStudentId.innerHTML = '<option value="">-- No Students Found --</option>';
             } else {
                 manualAttStudentId.innerHTML = '<option value="">-- Select Student --</option>' +
-                    students.map(s => `<option value="${s.id}">${escapeHtml(s.full_name)} (${escapeHtml(s.roll_no || 'N/A')}) - ${escapeHtml(s.semester || 'N/A')}</option>`).join('');
+                    students.map(s => `<option value="${s.id}">${escapeHtml(s.full_name)} (${escapeHtml(s.roll_no || 'N/A')}) - ${escapeHtml(s.department || 'General')}</option>`).join('');
             }
         } catch (err) {
             console.error('Error loading students for manual modal', err);
@@ -1373,6 +1463,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const holidayDateInput = document.getElementById('holidayDate');
 
     document.addEventListener('click', (e) => {
+        // Trigger CSV Export from Report Studio
+        if (e.target ? e.target.closest('.trigger-export-csv') : null) {
+            const exportBtn = document.getElementById('exportCsvBtn');
+            if (exportBtn) exportBtn.click();
+        }
+
+        // Trigger PDF / Print Report
+        if (e.target ? e.target.closest('#printReportBtn') : null) {
+            window.print();
+        }
+
+        // Trigger Deficiency Report Download
+        if (e.target ? e.target.closest('#downloadDeficiencyReportBtn') : null) {
+            const dept = document.getElementById('adminDeptFilter')?.value || 'all';
+            const sem = document.getElementById('adminSemesterFilter')?.value || 'all';
+            const date = document.getElementById('adminDateFilter')?.value || '';
+            let url = `/api/admin/export-attendance?department=${encodeURIComponent(dept)}`;
+            if (date) url += `&date=${encodeURIComponent(date)}`;
+            if (sem && sem !== 'all') url += `&semester=${encodeURIComponent(sem)}`;
+            window.location.href = url;
+        }
+
         const btn = e.target ? (e.target.classList.contains('open-holiday-modal-btn') ? e.target : e.target.closest('.open-holiday-modal-btn')) : null;
         if (btn) {
             e.preventDefault();
@@ -1449,6 +1561,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${escapeHtml(r.subject)}</td>
                     <td><span class="badge badge-staff">${escapeHtml(r.session_id)}</span></td>
                     <td>${escapeHtml(r.date)} • ${escapeHtml(r.time)}</td>
+                    <td>${renderGpsBadge(r)}</td>
                     <td>${renderStatusOverrideSelect(r)}</td>
                 </tr>
             `).join('');
@@ -1465,6 +1578,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div><strong>Class & Semester:</strong> ${escapeHtml(r.class_name)} (${escapeHtml(r.semester || '-')}) • ${escapeHtml(r.subject)}</div>
                         <div><strong>Session ID:</strong> ${escapeHtml(r.session_id)}</div>
                         <div><strong>Date & Time:</strong> ${escapeHtml(r.date)} at ${escapeHtml(r.time)}</div>
+                        <div><strong>GPS Location:</strong> ${renderGpsBadge(r)}</div>
                     </div>
                 </div>
             `).join('');
@@ -1553,14 +1667,20 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.innerHTML = records.map(r => `
                 <tr>
                     <td><strong>${escapeHtml(r.student_name)}</strong></td>
-                    <td>${escapeHtml(r.roll_no)}</td>
+                    <td><code>${escapeHtml(r.roll_no)}</code></td>
                     <td><span class="badge badge-staff">${escapeHtml(r.department)}</span></td>
                     <td>${escapeHtml(r.class_name)}</td>
                     <td>${escapeHtml(r.semester || '-')}</td>
                     <td>${escapeHtml(r.subject)}</td>
                     <td>${escapeHtml(r.date)} • ${escapeHtml(r.time)}</td>
                     <td><span class="badge badge-secondary">${escapeHtml(r.session_id)}</span></td>
-                    <td>${renderStatusOverrideSelect(r)}</td>
+                    <td>${renderGpsBadge(r)}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                            ${renderDynamicStatusBadge(r.status)}
+                            ${renderStatusOverrideSelect(r)}
+                        </div>
+                    </td>
                 </tr>
             `).join('');
         }
@@ -1568,17 +1688,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cards) {
             cards.innerHTML = records.map(r => `
                 <div class="user-card" style="margin-bottom: 0.75rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
                         <div>
                             <h4 style="font-size: 1.05rem; font-weight: 700; color: var(--color-navy-dark);">${escapeHtml(r.student_name)}</h4>
                             <span class="badge badge-staff">${escapeHtml(r.department)} • ${escapeHtml(r.roll_no)}</span>
                         </div>
-                        <div>${renderStatusOverrideSelect(r)}</div>
+                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;">
+                            ${renderDynamicStatusBadge(r.status)}
+                            ${renderStatusOverrideSelect(r)}
+                        </div>
                     </div>
                     <div style="font-size: 0.85rem; color: var(--color-text-muted); display: grid; gap: 0.25rem;">
                         <div><strong>Class & Semester:</strong> ${escapeHtml(r.class_name)} (${escapeHtml(r.semester || '-')}) • ${escapeHtml(r.subject)}</div>
                         <div><strong>Session ID:</strong> ${escapeHtml(r.session_id)}</div>
                         <div><strong>Date & Time:</strong> ${escapeHtml(r.date)} at ${escapeHtml(r.time)}</div>
+                        <div><strong>GPS Location:</strong> ${renderGpsBadge(r)}</div>
                     </div>
                 </div>
             `).join('');
@@ -1604,195 +1728,260 @@ document.addEventListener('DOMContentLoaded', () => {
     const qrWatermarkText = document.getElementById('qrWatermarkText');
 
     let liveClockInterval = null;
-    let totpRefreshInterval = null;
     let activeTotpSession = null;
 
-    function startLiveClockAndTotpLoop(subject, className, duration) {
+    function startLiveClockAndTotpLoop(subject, className, duration, department = '', semester = '') {
         if (liveClockInterval) clearInterval(liveClockInterval);
-        if (totpRefreshInterval) clearInterval(totpRefreshInterval);
-        
-        const sessionId = activeTotpSession ? activeTotpSession.sessionId : ('ATT-' + Math.floor(10000 + Math.random() * 90000));
-        activeTotpSession = { sessionId, subject, className, duration };
 
+        const sessionId = activeTotpSession ? activeTotpSession.sessionId : ('PERM-' + (department ? department.replace(/\s+/g, '').toUpperCase().slice(0, 4) : 'CS') + '-' + Math.floor(1000 + Math.random() * 9000));
+        activeTotpSession = { sessionId, subject, className, duration, department, semester };
+
+        const renderQrInstant = (payload) => {
+            if (qrcodeCanvas) qrcodeCanvas.innerHTML = '';
+            activeTotpSession.payload = payload;
+
+            try {
+                if (typeof QRCode !== 'undefined') {
+                    new QRCode(qrcodeCanvas, {
+                        text: JSON.stringify(payload),
+                        width: 200,
+                        height: 200,
+                        colorDark: "#0F172A",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                } else {
+                    const encodedData = encodeURIComponent(JSON.stringify(payload));
+                    qrcodeCanvas.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodedData}" alt="Permanent Campus QR Code" style="max-width: 200px; border-radius: 8px;">`;
+                }
+            } catch (err) {
+                const encodedData = encodeURIComponent(JSON.stringify(payload));
+                qrcodeCanvas.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodedData}" alt="Permanent Campus QR Code" style="max-width: 200px; border-radius: 8px;">`;
+            }
+
+            if (qrSessionCode) qrSessionCode.textContent = sessionId;
+            if (qrDisplaySubject) qrDisplaySubject.textContent = subject || 'Whole Day Attendance';
+            const teacherName = currentUser ? currentUser.full_name : 'Faculty Staff';
+            const deptText = department || (currentUser ? currentUser.department : 'General Dept');
+            const semText = semester ? ` (${semester})` : '';
+            if (qrDisplayMeta) qrDisplayMeta.textContent = `${deptText} • ${className}${semText} • Faculty: ${teacherName}`;
+        };
+
+        // 1. Instant local render (0ms delay immediately on click)
+        const instantPayload = {
+            type: 'aq_permanent_qr',
+            mode: 'permanent_never_expire',
+            session_id: sessionId,
+            subject: subject || 'Whole Day Attendance',
+            class: className,
+            department: department || (currentUser?.department || ''),
+            semester: semester || '',
+            teacher: currentUser ? currentUser.full_name : 'Faculty Staff',
+            campus_lat: 24.495374689123384,
+            campus_lng: 72.80818369745779,
+            never_expires: true,
+            timestamp: Math.floor(Date.now() / 1000)
+        };
+        renderQrInstant(instantPayload);
+
+        // 2. Async backend sync for verification server validity
         const fetchAndRenderTotpQr = async () => {
             try {
-                const res = await fetch(`/api/staff/totp-qr?session_id=${encodeURIComponent(sessionId)}&subject=${encodeURIComponent(subject)}&class=${encodeURIComponent(className)}`);
+                let url = `/api/staff/totp-qr?session_id=${encodeURIComponent(sessionId)}&subject=${encodeURIComponent(subject)}&class=${encodeURIComponent(className)}`;
+                if (department) url += `&department=${encodeURIComponent(department)}`;
+                if (semester) url += `&semester=${encodeURIComponent(semester)}`;
+
+                const res = await fetch(url);
                 const payload = await res.json();
-
-                if (!res.ok) return;
-
-                if (qrcodeCanvas) qrcodeCanvas.innerHTML = '';
-
-                try {
-                    if (typeof QRCode !== 'undefined') {
-                        new QRCode(qrcodeCanvas, {
-                            text: JSON.stringify(payload),
-                            width: 190,
-                            height: 190,
-                            colorDark: "#0F172A",
-                            colorLight: "#ffffff",
-                            correctLevel: QRCode.CorrectLevel.H
-                        });
-                    } else {
-                        const encodedData = encodeURIComponent(JSON.stringify(payload));
-                        qrcodeCanvas.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=${encodedData}" alt="Dynamic TOTP QR Code" style="max-width: 190px; border-radius: 8px;">`;
-                    }
-                } catch (err) {
-                    const encodedData = encodeURIComponent(JSON.stringify(payload));
-                    qrcodeCanvas.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=${encodedData}" alt="Dynamic TOTP QR Code" style="max-width: 190px; border-radius: 8px;">`;
+                if (res.ok) {
+                    renderQrInstant(payload);
                 }
-
-                if (qrSessionCode) qrSessionCode.textContent = sessionId;
-                if (qrDisplaySubject) qrDisplaySubject.textContent = subject;
-                const teacherName = currentUser ? currentUser.full_name : 'Faculty Staff';
-                if (qrDisplayMeta) qrDisplayMeta.textContent = `${className} • Faculty: ${teacherName} (Dynamic TOTP 15s)`;
-
             } catch (e) {
-                console.error('Error fetching TOTP QR:', e);
+                console.error('Error syncing QR payload:', e);
             }
         };
 
-        // Render immediately
         fetchAndRenderTotpQr();
 
-        // Update clock and 15s countdown every 1 second
+        // Update live clock
         const updateTick = () => {
             const now = new Date();
             const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
             const timeStr = now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            
+
             if (qrLiveDateDisplay) qrLiveDateDisplay.textContent = dateStr;
             if (qrLiveTimeDisplay) qrLiveTimeDisplay.textContent = timeStr;
-
-            // 15-second countdown calculation
-            const epochSec = Math.floor(now.getTime() / 1000);
-            const secLeft = 15 - (epochSec % 15);
-            const totpSecRemaining = document.getElementById('totpSecRemaining');
-            const totpProgressBar = document.getElementById('totpProgressBar');
-
-            if (totpSecRemaining) totpSecRemaining.textContent = secLeft;
-            if (totpProgressBar) {
-                const pct = (secLeft / 15) * 100;
-                totpProgressBar.style.width = pct + '%';
-                totpProgressBar.style.background = secLeft <= 3 ? '#EF4444' : (secLeft <= 6 ? '#F59E0B' : 'linear-gradient(90deg, #10B981 0%, #3B82F6 100%)');
-            }
-
-            // Refresh QR code on boundary (when secLeft is 15)
-            if (secLeft === 15) {
-                fetchAndRenderTotpQr();
-            }
         };
 
         updateTick();
         liveClockInterval = setInterval(updateTick, 1000);
     }
 
-    if (openGenerateQrModalBtn) {
-        openGenerateQrModalBtn.addEventListener('click', () => {
-            const staffQrDashboardCard = document.getElementById('staffQrDashboardCard');
-            if (staffQrDashboardCard) {
-                staffQrDashboardCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Print / Save Poster Handler for Permanent QR
+    const printQrPosterBtn = document.getElementById('printQrPosterBtn');
+    if (printQrPosterBtn) {
+        printQrPosterBtn.addEventListener('click', () => {
+            const qrCanvasImg = qrcodeCanvas?.querySelector('canvas') || qrcodeCanvas?.querySelector('img');
+            let qrSrc = '';
+            if (qrCanvasImg) {
+                qrSrc = qrCanvasImg.tagName.toLowerCase() === 'canvas' ? qrCanvasImg.toDataURL('image/png') : qrCanvasImg.src;
             }
-            const qrSubject = document.getElementById('qrSubject');
-            if (qrSubject) qrSubject.focus();
 
-            const qrClassInput = document.getElementById('qrClass');
-            if (qrClassInput && currentUser && currentUser.department && !qrClassInput.value) {
-                qrClassInput.value = `${currentUser.department} - Section A`;
+            const dept = activeTotpSession?.department || (currentUser?.department || 'Computer Science');
+            const cls = activeTotpSession?.className || 'B.Tech';
+            const sem = activeTotpSession?.semester || 'Semester 3';
+            const sess = activeTotpSession?.sessionId || 'PERM-001';
+            const faculty = currentUser ? currentUser.full_name : 'Faculty Staff';
+
+            const printWindow = window.open('', '_blank', 'width=800,height=900');
+            if (printWindow) {
+                printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>AQ Attendance - Permanent Campus QR</title>
+                        <style>
+                            @page { size: A4 portrait; margin: 15mm; }
+                            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; color: #0F172A; margin: 0; padding: 20px; }
+                            .poster-box { border: 3px solid #2563EB; border-radius: 16px; padding: 30px 20px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+                            .brand { font-size: 28px; font-weight: 900; color: #1E3A8A; letter-spacing: 1px; }
+                            .sub-brand { font-size: 14px; color: #64748B; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px; }
+                            .badge { display: inline-block; background: #DCFCE7; color: #15803D; font-weight: 800; font-size: 13px; padding: 6px 14px; border-radius: 999px; margin-top: 15px; border: 1px solid #86EFAC; }
+                            .meta-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin: 18px 0; font-size: 15px; font-weight: 600; }
+                            .meta-box strong { color: #2563EB; }
+                            .qr-container { padding: 15px; display: inline-block; background: #FFFFFF; border: 2px solid #0F172A; border-radius: 12px; margin: 10px 0; }
+                            .qr-container img { width: 240px; height: 240px; display: block; }
+                            .geofence-alert { background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E40AF; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; margin-top: 15px; }
+                            .instructions { margin-top: 15px; font-size: 12px; color: #64748B; line-height: 1.5; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="poster-box">
+                            <div class="brand">🎓 AQ ACADEMIC PORTAL</div>
+                            <div class="sub-brand">Official Classroom Attendance Notice</div>
+                            <div class="badge">✨ PERMANENT ATTENDANCE QR • NEVER EXPIRES</div>
+                            
+                            <div class="meta-box">
+                                <div>Department: <strong>${dept}</strong> | Class: <strong>${cls} (${sem})</strong></div>
+                                <div style="margin-top: 4px; font-size: 13px; color: #64748B;">Faculty In-Charge: ${faculty} | Session Code: ${sess}</div>
+                            </div>
+
+                            <div class="qr-container">
+                                <img src="${qrSrc}" alt="Permanent Campus QR Code">
+                            </div>
+
+                            <div class="geofence-alert">
+                                📍 College Campus Geofence Enforced (800m Radius)<br>
+                                Scans are validated using student GPS coordinates.
+                            </div>
+
+                            <div class="instructions">
+                                <strong>Instructions for Students:</strong><br>
+                                1. Open your <em>AQ Student Portal</em> on your mobile device.<br>
+                                2. Tap <strong>Scan Attendance QR Code</strong> and allow location access.<br>
+                                3. Attendance is marked for the current day. 1 scan per student per day.<br>
+                                4. This QR code is permanent and valid across all semester dates.
+                            </div>
+                        </div>
+                        <script>
+                            window.onload = function() { window.print(); };
+                        </script>
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
             }
         });
     }
 
-    const closeQrModal = () => {
-        if (qrResultContainer) qrResultContainer.classList.add('hidden');
-        if (liveClockInterval) clearInterval(liveClockInterval);
-        if (totpRefreshInterval) clearInterval(totpRefreshInterval);
-        activeTotpSession = null;
+    // Download PNG Button Handler
+    const downloadQrPngBtn = document.getElementById('downloadQrPngBtn');
+    if (downloadQrPngBtn) {
+        downloadQrPngBtn.addEventListener('click', () => {
+            const qrCanvasImg = qrcodeCanvas?.querySelector('canvas') || qrcodeCanvas?.querySelector('img');
+            if (!qrCanvasImg) {
+                showToast('Please generate a QR code first.', 'error');
+                return;
+            }
+            const imgData = qrCanvasImg.tagName.toLowerCase() === 'canvas' ? qrCanvasImg.toDataURL('image/png') : qrCanvasImg.src;
+            const a = document.createElement('a');
+            a.href = imgData;
+            const dept = (activeTotpSession?.department || 'Campus').replace(/\s+/g, '_');
+            const cls = (activeTotpSession?.className || 'Class').replace(/\s+/g, '_');
+            a.download = `AQ_Permanent_QR_${dept}_${cls}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast('Permanent QR PNG downloaded successfully!', 'success');
+        });
+    }
+
+    const generateQrFormModal = document.getElementById('generateQrFormModal');
+
+    if (openGenerateQrModalBtn) {
+        openGenerateQrModalBtn.addEventListener('click', () => {
+            if (generateQrModal) {
+                const modalDept = document.getElementById('qrModalDepartment');
+                if (modalDept && currentUser && currentUser.department && currentUser.department !== 'Administration') {
+                    modalDept.value = currentUser.department;
+                }
+                const modalClass = document.getElementById('qrModalClass');
+                if (modalClass && !modalClass.value) {
+                    modalClass.value = 'B.Tech';
+                }
+                generateQrModal.classList.remove('hidden');
+            } else {
+                const staffQrDashboardCard = document.getElementById('staffQrDashboardCard');
+                if (staffQrDashboardCard) {
+                    staffQrDashboardCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+        });
+    }
+
+    const closeGenerateQrModal = () => {
+        if (generateQrModal) generateQrModal.classList.add('hidden');
     };
 
-    if (closeQrModalBtn) closeQrModalBtn.addEventListener('click', closeQrModal);
-    if (cancelQrModalBtn) cancelQrModalBtn.addEventListener('click', closeQrModal);
+    if (closeQrModalBtn) closeQrModalBtn.addEventListener('click', closeGenerateQrModal);
+    if (cancelQrModalBtn) cancelQrModalBtn.addEventListener('click', closeGenerateQrModal);
+
+    function processQrFormSubmit(department, semester, className) {
+        const subject = 'Whole Day Attendance';
+        const duration = '1440';
+
+        activeTotpSession = null; // Fresh new session ID
+        startLiveClockAndTotpLoop(subject, className, duration, department, semester);
+
+        if (generateQrModal) generateQrModal.classList.add('hidden');
+
+        if (qrResultContainer) {
+            qrResultContainer.classList.remove('hidden');
+            qrResultContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        showToast(`✨ Permanent Campus QR generated for ${department} - ${className} (${semester})!`, 'success');
+    }
 
     if (generateQrForm) {
         generateQrForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const subject = document.getElementById('qrSubject').value.trim();
-            const className = document.getElementById('qrClass').value.trim();
-            const duration = document.getElementById('qrValidity').value;
+            const department = document.getElementById('qrDepartment')?.value || (currentUser?.department || 'Computer Science');
+            const semester = document.getElementById('qrSemester')?.value || 'Semester 3';
+            const className = document.getElementById('qrClass')?.value || 'B.Tech';
 
-            if (!subject || !className) {
-                showToast('Please fill out Subject and Class fields.', 'error');
-                return;
-            }
-
-            activeTotpSession = null; // Fresh new session ID
-            startLiveClockAndTotpLoop(subject, className, duration);
-
-            if (qrResultContainer) {
-                qrResultContainer.classList.remove('hidden');
-                setTimeout(() => {
-                    qrResultContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 100);
-            }
-            showToast('⚡ Live 15-Second Dynamic TOTP QR Active!', 'success');
+            processQrFormSubmit(department, semester, className);
         });
     }
 
-    // Interactive Quick Action Event Handlers (Re-Generate & Close Buttons on QR Result Box)
-    const regenQrBtn = document.getElementById('regenQrBtn');
-    const closeQrResultBtn = document.getElementById('closeQrResultBtn');
+    if (generateQrFormModal) {
+        generateQrFormModal.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const department = document.getElementById('qrModalDepartment')?.value || (currentUser?.department || 'Computer Science');
+            const semester = document.getElementById('qrModalSemester')?.value || 'Semester 3';
+            const className = document.getElementById('qrModalClass')?.value || 'B.Tech';
 
-    if (regenQrBtn) {
-        if (regenQrBtn) regenQrBtn.addEventListener('click', () => {
-            if (generateQrForm) {
-                // Trigger form submission to re-generate fresh QR session with new session ID
-                generateQrForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-                showToast('QR Code Re-Generated! New Session Active', 'success');
-            }
+            processQrFormSubmit(department, semester, className);
         });
-    }
-
-    if (closeQrResultBtn) {
-        if (closeQrResultBtn) closeQrResultBtn.addEventListener('click', closeQrModal);
-    }
-
-    // --- Mobile & Universal Anti-Screenshot Security Controller ---
-    function isQrCodeActive() {
-        return qrResultContainer && !qrResultContainer.classList.contains('hidden');
-    }
-
-    function showMobileSecurityBlur(reason = 'Screenshots and screen recording are disabled.') {
-        if (isQrCodeActive() && qrSecurityOverlay) {
-            qrSecurityOverlay.classList.remove('hidden');
-            if (reason) showToast(reason, 'error');
-        }
-    }
-
-    function hideMobileSecurityBlur() {
-        if (qrSecurityOverlay) {
-            qrSecurityOverlay.classList.add('hidden');
-        }
-    }
-
-    // Tap to Resume View Button Handlers for Mobile & Desktop Touch
-    const resumeQrSecurityBtn = document.getElementById('resumeQrSecurityBtn');
-    
-    const handleResumeTap = (e) => {
-        if (e) {
-            e.stopPropagation();
-            if (e.cancelable) e.preventDefault();
-        }
-        hideMobileSecurityBlur();
-    };
-
-    if (resumeQrSecurityBtn) {
-        resumeQrSecurityBtn.addEventListener('touchstart', handleResumeTap, { passive: false });
-        resumeQrSecurityBtn.addEventListener('click', handleResumeTap);
-    }
-
-    if (qrSecurityOverlay) {
-        qrSecurityOverlay.addEventListener('touchstart', handleResumeTap, { passive: false });
-        qrSecurityOverlay.addEventListener('click', handleResumeTap);
     }
 
     if (qrResultContainer) {
@@ -1855,9 +2044,9 @@ document.addEventListener('DOMContentLoaded', () => {
         toast.className = `toast toast-${type}`;
         toast.innerHTML = `
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                ${type === 'success' 
-                    ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>'
-                    : '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>'}
+                ${type === 'success'
+                ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>'
+                : '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>'}
             </svg>
             <span>${escapeHtml(message)}</span>
         `;
@@ -1949,87 +2138,9 @@ document.addEventListener('DOMContentLoaded', () => {
     makeElementDraggable(qrModalDragHeader, qrModalContainer);
     makeElementDraggable(qrCardDragHandle, qrModalContainer);
 
-    // --------------------------------------------------------------------------
-    // Mobile Connect Modal & Server Info Handler
-    // --------------------------------------------------------------------------
-    const mobileConnectBtn = document.getElementById('mobileConnectBtn');
-    const mobileConnectModal = document.getElementById('mobileConnectModal');
-    const closeMobileModalBtn = document.getElementById('closeMobileModalBtn');
-    const cancelMobileModalBtn = document.getElementById('cancelMobileModalBtn');
-    const mobileQrContainer = document.getElementById('mobileQrContainer');
-    const mobileUrlInput = document.getElementById('mobileUrlInput');
-    const copyMobileUrlBtn = document.getElementById('copyMobileUrlBtn');
-
-    if (mobileConnectBtn && mobileConnectModal) {
-        mobileConnectBtn.addEventListener('click', async () => {
-            mobileConnectModal.classList.remove('hidden');
-            if (mobileUrlInput) mobileUrlInput.value = 'Fetching network IP...';
-            if (mobileQrContainer) mobileQrContainer.innerHTML = '<span style="color:#666;">Loading QR Code...</span>';
-
-            try {
-                const res = await fetch('/api/server-info');
-                const data = await res.json();
-                if (data.success && data.mobile_url) {
-                    const mobileUrl = data.mobile_url;
-                    if (mobileUrlInput) mobileUrlInput.value = mobileUrl;
-                    if (mobileQrContainer) {
-                        mobileQrContainer.innerHTML = '';
-                        if (typeof QRCode !== 'undefined') {
-                            new QRCode(mobileQrContainer, {
-                                text: mobileUrl,
-                                width: 180,
-                                height: 180,
-                                colorDark: "#0F172A",
-                                colorLight: "#FFFFFF",
-                                correctLevel: QRCode.CorrectLevel.H
-                            });
-                        } else {
-                            mobileQrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(mobileUrl)}" alt="Mobile QR Code">`;
-                        }
-                    }
-                } else {
-                    const fallbackUrl = `http://${window.location.hostname}:5000`;
-                    if (mobileUrlInput) mobileUrlInput.value = fallbackUrl;
-                }
-            } catch (err) {
-                console.error("Error fetching mobile server info:", err);
-                const fallbackUrl = `http://${window.location.hostname}:5000`;
-                if (mobileUrlInput) mobileUrlInput.value = fallbackUrl;
-                if (mobileQrContainer && typeof QRCode !== 'undefined') {
-                    mobileQrContainer.innerHTML = '';
-                    new QRCode(mobileQrContainer, {
-                        text: fallbackUrl,
-                        width: 180,
-                        height: 180
-                    });
-                }
-            }
-        });
-
-        const closeMobileModal = () => {
-            mobileConnectModal.classList.add('hidden');
-        };
-
-        if (closeMobileModalBtn) closeMobileModalBtn.addEventListener('click', closeMobileModal);
-        if (cancelMobileModalBtn) cancelMobileModalBtn.addEventListener('click', closeMobileModal);
-
-        if (copyMobileUrlBtn && mobileUrlInput) {
-            copyMobileUrlBtn.addEventListener('click', () => {
-                const url = mobileUrlInput.value;
-                if (url && navigator.clipboard) {
-                    navigator.clipboard.writeText(url).then(() => {
-                        showToast('Mobile LAN address copied to clipboard!', 'success');
-                    }).catch(() => {
-                        showToast('Could not copy link automatically.', 'error');
-                    });
-                }
-            });
-        }
-    }
-
     function escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/[&<>"']/g, function(m) {
+        return str.replace(/[&<>"']/g, function (m) {
             return {
                 '&': '&amp;',
                 '<': '&lt;',

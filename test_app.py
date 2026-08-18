@@ -17,6 +17,9 @@ from werkzeug.security import generate_password_hash
 
 class AQTestCase(unittest.TestCase):
     def setUp(self):
+        """
+        Task: Set up isolated temporary test database environment and seed initial test accounts.
+        """
         # Ensure postgres env vars remain unset
         for env_key in ['DATABASE_URL', 'SUPABASE_DB_URL', 'POSTGRES_URL']:
             if env_key in os.environ:
@@ -67,6 +70,9 @@ class AQTestCase(unittest.TestCase):
             conn.close()
 
     def tearDown(self):
+        """
+        Task: Clean up temporary database files and environment overrides post test run.
+        """
         os.close(self.db_fd)
         if 'TEST_DB_PATH' in os.environ:
             del os.environ['TEST_DB_PATH']
@@ -77,12 +83,18 @@ class AQTestCase(unittest.TestCase):
                 pass
 
     def login(self, username, password, role=None):
+        """
+        Task: Execute test client login request for a given user account.
+        """
         payload = {'username': username, 'password': password}
         if role:
             payload['role'] = role
         return self.app.post('/api/login', data=json.dumps(payload), content_type='application/json')
 
     def logout(self):
+        """
+        Task: Execute test client logout request.
+        """
         return self.app.post('/api/logout')
 
     # --- TEST CASES ---
@@ -190,6 +202,9 @@ class AQTestCase(unittest.TestCase):
         data = json.loads(res.data)
         self.assertTrue(data['success'])
         self.assertEqual(data['attendance']['status'], 'Present')
+        self.assertIn('latitude', data['attendance'])
+        self.assertIn('longitude', data['attendance'])
+        self.assertIn('distance_meters', data['attendance'])
 
         # Try marking again for same date (Single scan per day rule enforcement)
         res_duplicate = self.app.post('/api/student/mark-attendance', data=json.dumps(mark_data), content_type='application/json')
@@ -278,56 +293,128 @@ class AQTestCase(unittest.TestCase):
         self.assertEqual(res.mimetype, 'text/csv')
         self.assertIn(b'Student Name,Roll No,Department', res.data)
 
-    def test_11_totp_engine_and_api(self):
-        """Test 15-second dynamic TOTP generation, API payload, and validation."""
-        from totp_engine import generate_totp_token, verify_totp_token, create_totp_payload, verify_totp_payload, get_secret_base32
+    def test_11_permanent_qr_engine_and_api(self):
+        """Test permanent QR generation, API payload, and geolocation validation."""
+        from totp_engine import create_permanent_qr_payload, verify_totp_payload
 
-        # 1. Direct TOTP Token generation & verification
-        secret = get_secret_base32("TEST-SESS-999")
-        token = generate_totp_token(secret, step=15)
-        self.assertEqual(len(token), 6)
-        self.assertTrue(token.isdigit())
-        self.assertTrue(verify_totp_token(secret, token, step=15))
-
-        # 2. Staff GET /api/staff/totp-qr endpoint
+        # 1. Staff GET /api/staff/totp-qr endpoint (Permanent QR)
         self.login('cs_faculty', 'staff123')
-        res = self.app.get('/api/staff/totp-qr?session_id=SESS-TOTP-01&subject=Algorithms')
+        res = self.app.get('/api/staff/totp-qr?session_id=PERM-CS-01&subject=Whole%20Day%20Attendance&department=Computer%20Science&class=B.Tech')
         self.assertEqual(res.status_code, 200)
         payload = json.loads(res.data)
-        self.assertEqual(payload['type'], 'aq_dynamic_totp_qr')
-        self.assertEqual(payload['session_id'], 'SESS-TOTP-01')
-        self.assertIn('totp_token', payload)
+        self.assertIn(payload['type'], ['aq_permanent_qr', 'aq_static_qr'])
+        self.assertEqual(payload['session_id'], 'PERM-CS-01')
+        self.assertTrue(payload.get('never_expires', False))
+        self.assertIn('signature', payload)
+        self.assertEqual(payload['campus_lat'], 24.495374689123384)
+        self.assertEqual(payload['campus_lng'], 72.80818369745779)
 
         self.logout()
 
-        # 3. Student scanning valid active TOTP payload
+        # 2. Student scanning valid permanent QR payload with valid campus coordinates
         self.login('student2', 'student123')
+        payload['lat'] = 24.495374689123384
+        payload['lng'] = 72.80818369745779
+        payload['date'] = '2026-08-18'
         mark_res = self.app.post('/api/student/mark-attendance', data=json.dumps(payload), content_type='application/json')
         self.assertEqual(mark_res.status_code, 200)
         self.assertTrue(json.loads(mark_res.data)['success'])
 
-    def test_12_totp_rejection_after_expiration(self):
-        """Test rejection of stale/invalid TOTP tokens (> 15 seconds old)."""
-        from totp_engine import generate_totp_token, get_secret_base32
-
+    def test_12_geolocation_rejection_off_campus(self):
+        """Test rejection when student is outside campus radius."""
         self.login('student1', 'student123')
 
-        secret = get_secret_base32("SESS-EXPIRED-99")
-        # Token generated 45 seconds ago (3 steps back, beyond the 1-step buffer)
-        stale_time = int(time.time()) - 45
-        stale_token = generate_totp_token(secret, step=15, current_timestamp=stale_time)
-
-        invalid_payload = {
-            'type': 'aq_dynamic_totp_qr',
-            'session_id': 'SESS-EXPIRED-99',
-            'subject': 'Data Structures',
-            'totp_token': '000000', # Invalid code
-            'step': 15
+        off_campus_payload = {
+            'type': 'aq_permanent_qr',
+            'session_id': 'PERM-GEOLOC-99',
+            'subject': 'Whole Day Attendance',
+            'date': '2026-08-18',
+            'lat': 28.6139, # Delhi lat (far off campus)
+            'lng': 77.2090  # Delhi lng
         }
-        res_invalid = self.app.post('/api/student/mark-attendance', data=json.dumps(invalid_payload), content_type='application/json')
+        res_invalid = self.app.post('/api/student/mark-attendance', data=json.dumps(off_campus_payload), content_type='application/json')
         self.assertEqual(res_invalid.status_code, 400)
-        self.assertIn('expired or invalid', json.loads(res_invalid.data)['error'].lower())
+        self.assertIn('campus', json.loads(res_invalid.data)['error'].lower())
+
+    def test_13_multi_date_permanent_qr_attendance(self):
+        """Test that the EXACT SAME permanent QR code works seamlessly across multiple different dates and enforces 1 scan per day."""
+        self.login('student1', 'student123')
+
+        # One single permanent QR code generated once for the classroom
+        permanent_qr_payload = {
+            'type': 'aq_permanent_qr',
+            'session_id': 'PERM-CLASSROOM-CS-2026',
+            'subject': 'Whole Day Attendance',
+            'class': 'B.Tech CS',
+            'department': 'Computer Science',
+            'never_expires': True,
+            'lat': 24.495374689123384, # On-campus GPS lat
+            'lng': 72.80818369745779   # On-campus GPS lng
+        }
+
+        # --- DAY 1: 2026-08-18 ---
+        permanent_qr_payload['date'] = '2026-08-18'
+        permanent_qr_payload['time'] = '09:05:00 AM'
+        res_day1 = self.app.post('/api/student/mark-attendance', data=json.dumps(permanent_qr_payload), content_type='application/json')
+        self.assertEqual(res_day1.status_code, 200)
+        data_day1 = json.loads(res_day1.data)
+        self.assertTrue(data_day1['success'])
+        self.assertEqual(data_day1['attendance']['date'], '2026-08-18')
+
+        # Attempt duplicate scan on Day 1 (should be blocked)
+        res_dup_day1 = self.app.post('/api/student/mark-attendance', data=json.dumps(permanent_qr_payload), content_type='application/json')
+        self.assertEqual(res_dup_day1.status_code, 400)
+        self.assertIn('already marked for today', json.loads(res_dup_day1.data)['error'].lower())
+
+        # --- DAY 2: 2026-08-19 (Next Day - SAME Permanent QR Code) ---
+        permanent_qr_payload['date'] = '2026-08-19'
+        permanent_qr_payload['time'] = '09:12:00 AM'
+        res_day2 = self.app.post('/api/student/mark-attendance', data=json.dumps(permanent_qr_payload), content_type='application/json')
+        self.assertEqual(res_day2.status_code, 200)
+        data_day2 = json.loads(res_day2.data)
+        self.assertTrue(data_day2['success'])
+        self.assertEqual(data_day2['attendance']['date'], '2026-08-19')
+
+        # Duplicate scan on Day 2 should be blocked
+        res_dup_day2 = self.app.post('/api/student/mark-attendance', data=json.dumps(permanent_qr_payload), content_type='application/json')
+        self.assertEqual(res_dup_day2.status_code, 400)
+        self.assertIn('already marked for today', json.loads(res_dup_day2.data)['error'].lower())
+
+        # --- DAY 3: 2026-08-20 (Third Day - SAME Permanent QR Code) ---
+        permanent_qr_payload['date'] = '2026-08-20'
+        permanent_qr_payload['time'] = '09:02:00 AM'
+        res_day3 = self.app.post('/api/student/mark-attendance', data=json.dumps(permanent_qr_payload), content_type='application/json')
+        self.assertEqual(res_day3.status_code, 200)
+        data_day3 = json.loads(res_day3.data)
+        self.assertTrue(data_day3['success'])
+        self.assertEqual(data_day3['attendance']['date'], '2026-08-20')
+
+        # Verify that all 3 attendance records exist in the database for student1
+        res_logs = self.app.get('/api/student/attendance')
+        self.assertEqual(res_logs.status_code, 200)
+        logs = json.loads(res_logs.data)['attendance']
+        dates_recorded = [r['date'] for r in logs]
+        self.assertIn('2026-08-18', dates_recorded)
+        self.assertIn('2026-08-19', dates_recorded)
+        self.assertIn('2026-08-20', dates_recorded)
+
+    def test_14_missing_or_invalid_location(self):
+        """Test rejection when GPS location coordinates are invalid or missing."""
+        self.login('student1', 'student123')
+
+        # Invalid out-of-bounds latitude
+        invalid_coords_payload = {
+            'type': 'aq_permanent_qr',
+            'session_id': 'PERM-TEST-01',
+            'subject': 'Whole Day Attendance',
+            'date': '2026-08-25',
+            'lat': 999.0,
+            'lng': 72.8081
+        }
+        res_invalid = self.app.post('/api/student/mark-attendance', data=json.dumps(invalid_coords_payload), content_type='application/json')
+        self.assertEqual(res_invalid.status_code, 400)
 
 if __name__ == '__main__':
     import time
     unittest.main()
+

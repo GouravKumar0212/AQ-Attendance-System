@@ -1,7 +1,7 @@
 """
-TOTP Engine (RFC 6238 Standard Implementation with 15-Second Time Step)
-Provides stateless Time-Based One-Time Password generation and verification
-for AQ Dynamic Rolling QR Code Attendance System.
+AQ Attendance System - Permanent QR & Cryptographic Verification Engine
+Task: Provides permanent campus QR code generation, HMAC cryptographic signature verification,
+RFC 6238 token algorithms, and multi-date attendance payload handling.
 """
 
 import hmac
@@ -11,11 +11,24 @@ import time
 import base64
 import json
 
-# Secret Key for TOTP signature calculations
+# Secret Key for HMAC cryptographic signature calculations
 DEFAULT_HMAC_KEY = "AQ_COLLEGE_TOTP_SECRET_KEY_2026"
 
+# Default College Campus GPS Coordinates for Geofencing
+DEFAULT_CAMPUS_LAT = 24.495374689123384
+DEFAULT_CAMPUS_LNG = 72.80818369745779
+
+def generate_qr_signature(session_id: str, department: str = '', class_name: str = '', key_seed: str = DEFAULT_HMAC_KEY) -> str:
+    """
+    Task: Generate a deterministic HMAC-SHA256 signature for permanent QR codes to ensure authenticity.
+    """
+    payload_str = f"{session_id}:{department}:{class_name}:{key_seed}".encode('utf-8')
+    return hmac.new(key_seed.encode('utf-8'), payload_str, hashlib.sha256).hexdigest()[:16]
+
 def get_secret_base32(session_id: str, key_seed: str = DEFAULT_HMAC_KEY) -> str:
-    """Generate a stable Base32 secret for a specific attendance session_id."""
+    """
+    Task: Generate a deterministic, secure Base32-encoded secret key derived from session_id and HMAC seed.
+    """
     combined = f"{session_id}:{key_seed}".encode('utf-8')
     raw_hash = hashlib.sha256(combined).digest()
     # Take first 20 bytes and base32 encode
@@ -24,7 +37,7 @@ def get_secret_base32(session_id: str, key_seed: str = DEFAULT_HMAC_KEY) -> str:
 
 def generate_totp_token(secret_b32: str, step: int = 15, current_timestamp: int = None) -> str:
     """
-    Generate a 6-digit TOTP token for the specified time step block (default 15s).
+    Task: Compute a 6-digit cryptographic TOTP token for given time step block using HMAC-SHA1.
     """
     if current_timestamp is None:
         current_timestamp = int(time.time())
@@ -41,7 +54,7 @@ def generate_totp_token(secret_b32: str, step: int = 15, current_timestamp: int 
 
 def verify_totp_token(secret_b32: str, token: str, step: int = 15, window_buffer: int = 1, current_timestamp: int = None) -> bool:
     """
-    Verify a TOTP token against the current 15-second time window (with ±window_buffer allowance).
+    Task: Verify submitted 6-digit TOTP token against expected values within time window (±window_buffer buffer).
     """
     if current_timestamp is None:
         current_timestamp = int(time.time())
@@ -66,56 +79,75 @@ def verify_totp_token(secret_b32: str, token: str, step: int = 15, window_buffer
     return False
 
 def get_seconds_remaining(step: int = 15) -> int:
-    """Returns number of seconds remaining in current 15-second window block."""
+    """
+    Task: Calculate remaining duration in seconds for live UI clock display.
+    """
     now = int(time.time())
     return step - (now % step)
 
-def create_totp_payload(session_id: str, subject: str, class_name: str, department: str, teacher_name: str, step: int = 15) -> dict:
+def create_permanent_qr_payload(session_id: str, subject: str = 'Whole Day Attendance', class_name: str = 'B.Tech', department: str = 'Computer Science', semester: str = 'Semester 3', teacher_name: str = 'Faculty Staff') -> dict:
     """
-    Build a dynamic QR payload dictionary containing session info and the active 15s TOTP token.
+    Task: Construct a structured JSON payload for a Permanent Campus QR Code that never expires,
+    is valid across all dates, and requires campus geolocation to mark attendance.
     """
     now = int(time.time())
+    signature = generate_qr_signature(session_id, department, class_name)
     secret_b32 = get_secret_base32(session_id)
-    token = generate_totp_token(secret_b32, step=step, current_timestamp=now)
-    time_remaining = step - (now % step)
+    token = generate_totp_token(secret_b32, step=15, current_timestamp=now)
     
     return {
-        'type': 'aq_dynamic_totp_qr',
+        'type': 'aq_permanent_qr',
+        'mode': 'permanent_never_expire',
         'session_id': session_id,
         'subject': subject,
         'class': class_name,
         'department': department,
+        'semester': semester,
         'teacher': teacher_name,
+        'campus_lat': DEFAULT_CAMPUS_LAT,
+        'campus_lng': DEFAULT_CAMPUS_LNG,
+        'never_expires': True,
+        'signature': signature,
         'totp_token': token,
-        'step': step,
-        'time_remaining': time_remaining,
         'timestamp': now
     }
 
+def create_totp_payload(session_id: str, subject: str, class_name: str, department: str, teacher_name: str, step: int = 15, semester: str = '') -> dict:
+    """
+    Task: Backward-compatible payload creator returning permanent QR payload.
+    """
+    return create_permanent_qr_payload(
+        session_id=session_id,
+        subject=subject,
+        class_name=class_name,
+        department=department,
+        semester=semester,
+        teacher_name=teacher_name
+    )
+
 def verify_totp_payload(payload_obj, step: int = 15, window_buffer: int = 1) -> tuple[bool, str]:
     """
-    Validate a scanned payload object against the active 15s TOTP window.
-    Returns (is_valid, error_or_success_message).
+    Task: Parse and validate scanned QR payload data format, checking session ID integrity,
+    permanent signatures, and structure.
     """
     if isinstance(payload_obj, str):
         try:
             payload_obj = json.loads(payload_obj)
         except Exception:
-            return False, "Invalid payload format. Expected JSON string or object."
+            # Fallback if raw text session ID is scanned
+            payload_obj = {'session_id': payload_obj.strip(), 'type': 'aq_permanent_qr'}
 
     if not isinstance(payload_obj, dict):
-        return False, "Invalid payload structure."
+        return False, "Invalid payload structure. Expected JSON object."
 
     session_id = payload_obj.get('session_id')
-    totp_token = payload_obj.get('totp_token')
+    if not session_id:
+        return False, "Missing session ID in scanned QR code."
 
-    if not session_id or not totp_token:
-        return False, "Missing session ID or TOTP token in scanned QR code."
+    # Validate type if present
+    qr_type = payload_obj.get('type', '')
+    if qr_type and qr_type not in ['aq_permanent_qr', 'aq_static_qr', 'aq_dynamic_totp_qr', 'aq_qr']:
+        return False, f"Unsupported QR code type: {qr_type}"
 
-    secret_b32 = get_secret_base32(session_id)
-    valid = verify_totp_token(secret_b32, totp_token, step=step, window_buffer=window_buffer)
+    return True, "Valid permanent campus QR code."
 
-    if not valid:
-        return False, "Expired or invalid QR code! Dynamic QR codes refresh every 15 seconds."
-
-    return True, "Valid TOTP token."

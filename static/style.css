@@ -1097,11 +1097,39 @@ textarea:hover,
     color: var(--color-text-main);
 }
 
+.modal-container form,
+.modal-content form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+}
+
 .modal-body {
     padding: 1.35rem;
     overflow-y: auto;
     flex: 1;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     background: #FFFFFF;
+}
+
+/* Custom Visible Scrollbar for Modal Forms */
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+.modal-body::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.05);
+    border-radius: 4px;
+}
+.modal-body::-webkit-scrollbar-thumb {
+    background: rgba(37, 99, 235, 0.35);
+    border-radius: 4px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: var(--color-blue);
 }
 
 .modal-footer {
@@ -1312,10 +1340,6 @@ textarea:hover,
 
 /* Tablet & Mobile Screens (<= 768px) */
 @media (max-width: 768px) {
-    .desktop-only {
-        display: none !important;
-    }
-
     .mobile-only-cards {
         display: flex;
     }
@@ -1450,32 +1474,154 @@ textarea:hover,
     }
 }
 
-/* Desktop Devices (>= 1025px) */
-@media (min-width: 1025px) {
-    .main-content {
-        padding: 1.75rem 1.5rem;
-    }
+/* --------------------------------------------------------------------------
+   ADMIN TAB NAVIGATION & SCROLLER STYLES
+   -------------------------------------------------------------------------- */
+.admin-nav-scroll-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0 0.75rem 0;
+    margin-bottom: 1.25rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
 }
 
-/* Mobile Access Button */
-.btn-mobile-connect {
+.admin-nav-scroll-wrapper::-webkit-scrollbar {
+    height: 4px;
+}
+
+.admin-nav-scroll-wrapper::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 4px;
+}
+
+.admin-nav-scroll-wrapper::-webkit-scrollbar-thumb {
+    background: var(--color-border, #CBD5E1);
+    border-radius: 4px;
+}
+
+.admin-nav-pills {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    min-width: max-content;
+    padding: 2px;
+}
+
+.admin-tab-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background: rgba(37, 99, 235, 0.1);
-    color: var(--color-blue);
-    border: 1px solid var(--color-blue-border);
-    padding: 6px 14px;
-    border-radius: var(--radius-full);
-    font-size: 0.85rem;
-    font-weight: 600;
+    gap: 0.55rem;
+    padding: 0.65rem 1.2rem;
+    border-radius: var(--radius-md, 12px);
+    font-weight: 700;
+    font-size: 0.92rem;
+    background: #FFFFFF;
+    color: var(--color-navy-dark, #0F172A);
+    border: 1.5px solid var(--color-border, #E2E8F0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
     cursor: pointer;
-    transition: var(--transition-fast);
+    white-space: nowrap;
+    transition: all 0.2s ease-in-out;
 }
 
-.btn-mobile-connect:hover {
-    background: var(--color-blue);
-    color: #ffffff;
-    border-color: var(--color-blue);
+.admin-tab-btn:hover {
+    background: #F8FAFC;
+    border-color: #2563EB;
+    color: #2563EB;
+    transform: translateY(-1px);
 }
+
+.admin-tab-btn.active {
+    background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
+    color: #FFFFFF;
+    border-color: #1E3A8A;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.admin-tab-btn svg {
+    flex-shrink: 0;
+}
+
+/* Report Generation Studio Cards */
+.report-gen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.25rem;
+}
+
+.report-gen-card {
+    display: flex;
+    gap: 1rem;
+    background: var(--color-bg-card, #FFFFFF);
+    border: 1.5px solid var(--color-border, #E2E8F0);
+    border-radius: var(--radius-lg, 16px);
+    padding: 1.25rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.report-gen-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md, 0 4px 14px rgba(0,0,0,0.06));
+    border-color: rgba(37, 99, 235, 0.3);
+}
+
+.report-gen-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.report-gen-icon.icon-emerald {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10B981;
+}
+
+.report-gen-icon.icon-crimson {
+    background: rgba(239, 68, 68, 0.12);
+    color: #EF4444;
+}
+
+.report-gen-icon.icon-purple {
+    background: rgba(139, 92, 246, 0.12);
+    color: #8B5CF6;
+}
+
+.report-gen-icon.icon-navy {
+    background: rgba(37, 99, 235, 0.12);
+    color: #2563EB;
+}
+
+.report-gen-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    flex: 1;
+}
+
+.report-gen-info h4 {
+    margin: 0 0 0.4rem 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--color-navy-dark, #0F172A);
+}
+
+.report-gen-info p {
+    margin: 0 0 1rem 0;
+    font-size: 0.85rem;
+    color: var(--color-text-muted, #64748B);
+    line-height: 1.45;
+}
+
+.report-gen-actions {
+    margin-top: auto;
+}
+
+
+
 

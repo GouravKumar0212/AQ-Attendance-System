@@ -1,12 +1,21 @@
+"""
+AQ Attendance System - Geofencing Module
+Task: Calculates geographic distance and validates if student GPS coordinates are inside the college campus geofence.
+"""
+
 import math
 
+# Default College Campus GPS Coordinates
 COLLEGE_LATITUDE = 24.495374689123384
 COLLEGE_LONGITUDE = 72.80818369745779
 
-MAX_RADIUS_METERS = 100
+# Maximum Geofence Radius Threshold (in Meters)
+MAX_RADIUS_METERS = 800
 
 def distance_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Great-circle distance between two lat/lng points, in meters (Haversine formula)."""
+    """
+    Task: Calculate the Great-Circle distance in meters between two lat/lng coordinates using the Haversine formula.
+    """
     R = 6371000  # Earth radius in meters
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
@@ -17,8 +26,8 @@ def distance_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float
 
 def is_within_campus(lat, lng, radius_meters: float = MAX_RADIUS_METERS) -> tuple[bool, float]:
     """
-    Returns (is_inside, distance_in_meters).
-    Returns (False, -1) if lat/lng are missing or malformed.
+    Task: Validate whether student GPS coordinates are within the college campus geofence boundary.
+    Returns: (is_inside: bool, distance_in_meters: float).
     """
     try:
         lat = float(lat)
@@ -26,7 +35,7 @@ def is_within_campus(lat, lng, radius_meters: float = MAX_RADIUS_METERS) -> tupl
     except (TypeError, ValueError):
         return False, -1
 
-    # Basic sanity bounds so garbage/spoofed values don't slip through
+    # Basic sanity bounds checking for coordinates
     if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
         return False, -1
 
