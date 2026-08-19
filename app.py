@@ -215,12 +215,19 @@ def parse_db_url_to_pg_params(db_url):
         'sslmode': 'require'
     }
 
+# Default Supabase Database URL (Transaction Pooler - IPv4)
+DEFAULT_SUPABASE_DATABASE_URL = "postgresql://postgres.lpuwgdniabfkkhdrncqg:Gourav%400712@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres"
+
 def get_db_connection():
     """
     Task: Open connection to PostgreSQL cloud database (Supabase/Vercel) via pg8000 or psycopg2, or fall back to SQLite.
     """
     db_url = os.environ.get('DATABASE_URL') or os.environ.get('SUPABASE_DB_URL') or os.environ.get('POSTGRES_URL')
     
+    # In production/cloud (e.g. Vercel), default to Supabase PostgreSQL unless isolated test mode is requested
+    if not db_url and not app.config.get('TESTING') and not os.environ.get('TEST_DB_PATH'):
+        db_url = DEFAULT_SUPABASE_DATABASE_URL
+
     if db_url:
         params = parse_db_url_to_pg_params(db_url)
 
