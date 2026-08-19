@@ -151,3 +151,154 @@ def verify_totp_payload(payload_obj, step: int = 15, window_buffer: int = 1) -> 
 
     return True, "Valid permanent campus QR code."
 
+
+def run_staff_generator(session_id="SESS-CS101", subject="Whole Day Attendance", class_name="B.Tech CS", department="Computer Science", semester="Semester 3", teacher_name="Faculty Staff", output_file="permanent_campus_qr.png"):
+    """
+    Task: Generate permanent never-expiring campus QR code payload and save printable QR code PNG.
+    """
+    import os
+    try:
+        import qrcode
+        has_qr = True
+    except ImportError:
+        has_qr = False
+
+    print("=" * 64)
+    print(" [AQ] Permanent Campus Attendance QR Generator")
+    print("=" * 64)
+    print(f" Session ID  : {session_id}")
+    print(f" Subject     : {subject}")
+    print(f" Class       : {class_name}")
+    print(f" Department  : {department}")
+    print(f" Semester    : {semester}")
+    print(f" Validity    : PERMANENT (Never Expires - Valid on All Dates)")
+    print(f" Geofence    : Campus Lat {DEFAULT_CAMPUS_LAT}, Lng {DEFAULT_CAMPUS_LNG}")
+    print("=" * 64)
+
+    payload = create_permanent_qr_payload(
+        session_id=session_id,
+        subject=subject,
+        class_name=class_name,
+        department=department,
+        semester=semester,
+        teacher_name=teacher_name
+    )
+
+    payload_json = json.dumps(payload, indent=2)
+    print("\n[+] Permanent QR Payload Generated:")
+    print(payload_json)
+
+    if has_qr:
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(json.dumps(payload))
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="#0F172A", back_color="#FFFFFF")
+        img.save(output_file)
+        print(f"\n[+] Saved Permanent QR code image to: {os.path.abspath(output_file)}")
+    else:
+        print("\nNote: 'qrcode' Python package not found. To generate PNG image files, run: pip install qrcode pillow")
+
+    return payload
+
+
+def verify_student_attendance_payload(student_id: str, payload_raw, lat: float = None, lng: float = None) -> dict:
+    """
+    Task: Validate student attendance submissions by checking student ID, parsing scanned QR JSON payload,
+    verifying cryptographic integrity, and validating campus geofencing location.
+    """
+    from geofence import is_within_campus
+
+    if not student_id:
+        return {'success': False, 'message': 'Student ID is required.'}
+
+    if not payload_raw:
+        return {'success': False, 'message': 'Scanned QR payload is empty.'}
+
+    if isinstance(payload_raw, str):
+        try:
+            payload_data = json.loads(payload_raw)
+        except Exception:
+            payload_data = {'session_id': payload_raw.strip(), 'type': 'aq_permanent_qr'}
+    else:
+        payload_data = payload_raw
+
+    # 1. Verify QR Payload Authenticity
+    is_valid, msg = verify_totp_payload(payload_data)
+    if not is_valid:
+        return {
+            'success': False,
+            'message': f"[REJECTED] Attendance REJECTED for Student {student_id}: {msg}",
+            'student_id': student_id
+        }
+
+    # 2. Verify Campus Geofencing if coordinates provided
+    if lat is not None and lng is not None:
+        inside, dist = is_within_campus(lat, lng)
+        if not inside:
+            return {
+                'success': False,
+                'message': f"[REJECTED] Outside campus perimeter ({int(dist)}m away). Must be physically inside campus.",
+                'student_id': student_id
+            }
+
+    return {
+        'success': True,
+        'message': f"[ACCEPTED] Attendance ACCEPTED for Student {student_id}! (Valid Permanent Campus QR)",
+        'session_id': payload_data.get('session_id'),
+        'subject': payload_data.get('subject', 'Whole Day Attendance'),
+        'student_id': student_id
+    }
+
+
+if __name__ == '__main__':
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description="AQ Attendance System - Cryptographic QR & Verification Engine")
+    subparsers = parser.add_subparsers(dest="command", help="Command mode: generate or verify")
+
+    # Generate Subcommand
+    gen_parser = subparsers.add_parser("generate", help="Generate permanent campus QR code")
+    gen_parser.add_argument('--session', default='SESS-CS101', help='Session ID')
+    gen_parser.add_argument('--subject', default='Whole Day Attendance', help='Subject Name')
+    gen_parser.add_argument('--class', dest='class_name', default='B.Tech CS', help='Class Name')
+    gen_parser.add_argument('--dept', default='Computer Science', help='Department')
+    gen_parser.add_argument('--semester', default='Semester 3', help='Semester')
+    gen_parser.add_argument('--teacher', default='Dr. Smith', help='Faculty Name')
+    gen_parser.add_argument('--output', default='permanent_campus_qr.png', help='Output PNG file')
+
+    # Verify Subcommand
+    ver_parser = subparsers.add_parser("verify", help="Verify student QR attendance submission")
+    ver_parser.add_argument('--student', required=True, help='Student ID or Roll No')
+    ver_parser.add_argument('--payload', required=True, help='Scanned QR payload JSON or session string')
+    ver_parser.add_argument('--lat', type=float, default=None, help='Student GPS Latitude')
+    ver_parser.add_argument('--lng', type=float, default=None, help='Student GPS Longitude')
+
+    args = parser.parse_args()
+
+    if args.command == "generate" or (not args.command and len(sys.argv) == 1):
+        run_staff_generator(
+            session_id=getattr(args, 'session', 'SESS-CS101'),
+            subject=getattr(args, 'subject', 'Whole Day Attendance'),
+            class_name=getattr(args, 'class_name', 'B.Tech CS'),
+            department=getattr(args, 'dept', 'Computer Science'),
+            semester=getattr(args, 'semester', 'Semester 3'),
+            teacher_name=getattr(args, 'teacher', 'Dr. Smith'),
+            output_file=getattr(args, 'output', 'permanent_campus_qr.png')
+        )
+    elif args.command == "verify":
+        result = verify_student_attendance_payload(args.student, args.payload, lat=args.lat, lng=args.lng)
+        print("=" * 60)
+        print(f" Student ID : {args.student}")
+        print(f" Status     : {'SUCCESS' if result['success'] else 'FAILED'}")
+        print(f" Detail     : {result['message']}")
+        print("=" * 60)
+        sys.exit(0 if result['success'] else 1)
+    else:
+        parser.print_help()
+

@@ -14,9 +14,12 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from app import app, init_db, get_db_connection
 from werkzeug.security import generate_password_hash
 from geofence import is_within_campus, distance_meters, COLLEGE_LATITUDE, COLLEGE_LONGITUDE, MAX_RADIUS_METERS
-from totp_engine import create_permanent_qr_payload, verify_totp_payload
-from totp_verifier import verify_student_attendance_payload
-from totp_generator import run_staff_generator
+from totp_engine import (
+    create_permanent_qr_payload,
+    verify_totp_payload,
+    run_staff_generator,
+    verify_student_attendance_payload
+)
 
 class PermanentQRFullSuite(unittest.TestCase):
     def setUp(self):
