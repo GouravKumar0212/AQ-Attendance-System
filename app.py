@@ -730,25 +730,25 @@ def get_staff_students():
 @app.route('/api/staff/totp-qr', methods=['GET', 'POST'])
 def get_staff_totp_qr():
     """
-    Task: Generate permanent campus attendance QR code payload for staff/faculty classroom display.
+    Task: Return permanent lifetime campus attendance QR code payload for staff/faculty classroom display.
     """
     if session.get('role') not in ['staff', 'admin']:
         return jsonify({'error': 'Unauthorized access. Staff rights required.'}), 403
-
-    data = request.get_json() or {} if request.method == 'POST' else request.args
-    session_id = data.get('session_id', '').strip() or request.args.get('session_id', '').strip() or 'SESS-CS101'
-    subject = data.get('subject', '').strip() or request.args.get('subject', '').strip() or 'Whole Day Attendance'
-    class_name = data.get('class', '').strip() or request.args.get('class', '').strip() or 'B.Tech'
-    semester = data.get('semester', '').strip() or request.args.get('semester', '').strip() or 'Semester 3'
-    req_dept = data.get('department', '').strip() or request.args.get('department', '').strip()
 
     conn = get_db_connection()
     user_id = session.get('user_id')
     staff = conn.execute('SELECT full_name, department FROM users WHERE id = ?', (user_id,)).fetchone()
     conn.close()
 
-    department = req_dept or (staff['department'] if (staff and staff['department']) else 'Computer Science')
+    department = (staff['department'] if (staff and staff['department']) else session.get('department', 'Computer Science')) or 'Computer Science'
     teacher_name = staff['full_name'] if (staff and staff['full_name']) else session.get('full_name', 'Faculty Staff')
+    
+    data = request.get_json() or {} if request.method == 'POST' else request.args
+    dept_code = "".join(c for c in department.upper() if c.isalnum())[:4] or 'CS'
+    session_id = data.get('session_id', '').strip() or f"PERM-{dept_code}-OFFICIAL"
+    subject = data.get('subject', '').strip() or "Whole Day Attendance"
+    class_name = data.get('class', '').strip() or "All Classes"
+    semester = data.get('semester', '').strip() or "All Semesters"
 
     payload = create_totp_payload(
         session_id=session_id,

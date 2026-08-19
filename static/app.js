@@ -512,6 +512,9 @@ document.addEventListener('DOMContentLoaded', () => {
         staffDepartment.textContent = currentUser.department || 'General Faculty';
         staffEmail.textContent = currentUser.email || 'N/A';
 
+        // Automatically display staff member's permanent lifetime QR code immediately on login or refresh
+        loadStaffPermanentQr();
+
         try {
             const response = await fetch('/api/staff/students');
             if (response.ok) {
@@ -1711,12 +1714,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-    // --- Teacher Attendance QR Code Generator & Security Controller ---
-    const generateQrModal = document.getElementById('generateQrModal');
-    const openGenerateQrModalBtn = document.getElementById('openGenerateQrModalBtn');
-    const closeQrModalBtn = document.getElementById('closeQrModalBtn');
-    const cancelQrModalBtn = document.getElementById('cancelQrModalBtn');
-    const generateQrForm = document.getElementById('generateQrForm');
+    // --- Faculty Staff Permanent Lifetime Campus QR Controller ---
     const qrResultContainer = document.getElementById('qrResultContainer');
     const qrcodeCanvas = document.getElementById('qrcodeCanvas');
     const qrDisplaySubject = document.getElementById('qrDisplaySubject');
@@ -1724,17 +1722,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const qrSessionCode = document.getElementById('qrSessionCode');
     const qrLiveDateDisplay = document.getElementById('qrLiveDateDisplay');
     const qrLiveTimeDisplay = document.getElementById('qrLiveTimeDisplay');
-    const qrSecurityOverlay = document.getElementById('qrSecurityOverlay');
-    const qrWatermarkText = document.getElementById('qrWatermarkText');
 
     let liveClockInterval = null;
     let activeTotpSession = null;
 
-    function startLiveClockAndTotpLoop(subject, className, duration, department = '', semester = '') {
+    async function loadStaffPermanentQr() {
         if (liveClockInterval) clearInterval(liveClockInterval);
 
-        const sessionId = activeTotpSession ? activeTotpSession.sessionId : ('PERM-' + (department ? department.replace(/\s+/g, '').toUpperCase().slice(0, 4) : 'CS') + '-' + Math.floor(1000 + Math.random() * 9000));
-        activeTotpSession = { sessionId, subject, className, duration, department, semester };
+        const department = currentUser?.department || 'Computer Science';
+        const teacherName = currentUser?.full_name || 'Faculty Staff';
+        const deptCode = department.replace(/\s+/g, '').toUpperCase().slice(0, 4) || 'CS';
+        const sessionId = `PERM-${deptCode}-OFFICIAL`;
+        const subject = 'Whole Day Attendance';
+
+        activeTotpSession = { sessionId, subject, department, teacherName };
 
         const renderQrInstant = (payload) => {
             if (qrcodeCanvas) qrcodeCanvas.innerHTML = '';
@@ -1760,50 +1761,38 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (qrSessionCode) qrSessionCode.textContent = sessionId;
-            if (qrDisplaySubject) qrDisplaySubject.textContent = subject || 'Whole Day Attendance';
-            const teacherName = currentUser ? currentUser.full_name : 'Faculty Staff';
-            const deptText = department || (currentUser ? currentUser.department : 'General Dept');
-            const semText = semester ? ` (${semester})` : '';
-            if (qrDisplayMeta) qrDisplayMeta.textContent = `${deptText} • ${className}${semText} • Faculty: ${teacherName}`;
+            if (qrDisplaySubject) qrDisplaySubject.textContent = subject;
+            if (qrDisplayMeta) qrDisplayMeta.textContent = `${department} • All Classes & Semesters • Faculty: ${teacherName}`;
         };
 
-        // 1. Instant local render (0ms delay immediately on click)
+        // 1. Instant deterministic local render for 0ms page load
         const instantPayload = {
             type: 'aq_permanent_qr',
             mode: 'permanent_never_expire',
             session_id: sessionId,
-            subject: subject || 'Whole Day Attendance',
-            class: className,
-            department: department || (currentUser?.department || ''),
-            semester: semester || '',
-            teacher: currentUser ? currentUser.full_name : 'Faculty Staff',
+            subject: subject,
+            class: 'All Classes',
+            department: department,
+            semester: 'All Semesters',
+            teacher: teacherName,
             campus_lat: 24.495374689123384,
             campus_lng: 72.80818369745779,
-            never_expires: true,
-            timestamp: Math.floor(Date.now() / 1000)
+            never_expires: true
         };
         renderQrInstant(instantPayload);
 
-        // 2. Async backend sync for verification server validity
-        const fetchAndRenderTotpQr = async () => {
-            try {
-                let url = `/api/staff/totp-qr?session_id=${encodeURIComponent(sessionId)}&subject=${encodeURIComponent(subject)}&class=${encodeURIComponent(className)}`;
-                if (department) url += `&department=${encodeURIComponent(department)}`;
-                if (semester) url += `&semester=${encodeURIComponent(semester)}`;
-
-                const res = await fetch(url);
+        // 2. Fetch server signed permanent payload
+        try {
+            const res = await fetch('/api/staff/totp-qr');
+            if (res.ok) {
                 const payload = await res.json();
-                if (res.ok) {
-                    renderQrInstant(payload);
-                }
-            } catch (e) {
-                console.error('Error syncing QR payload:', e);
+                renderQrInstant(payload);
             }
-        };
+        } catch (e) {
+            console.error('Error fetching permanent QR payload:', e);
+        }
 
-        fetchAndRenderTotpQr();
-
-        // Update live clock
+        // 3. Live clock
         const updateTick = () => {
             const now = new Date();
             const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -1828,9 +1817,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const dept = activeTotpSession?.department || (currentUser?.department || 'Computer Science');
-            const cls = activeTotpSession?.className || 'B.Tech';
-            const sem = activeTotpSession?.semester || 'Semester 3';
-            const sess = activeTotpSession?.sessionId || 'PERM-001';
+            const sess = activeTotpSession?.sessionId || 'PERM-CS-OFFICIAL';
             const faculty = currentUser ? currentUser.full_name : 'Faculty Staff';
 
             const printWindow = window.open('', '_blank', 'width=800,height=900');
@@ -1859,10 +1846,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="poster-box">
                             <div class="brand">🎓 AQ ACADEMIC PORTAL</div>
                             <div class="sub-brand">Official Classroom Attendance Notice</div>
-                            <div class="badge">✨ PERMANENT ATTENDANCE QR • NEVER EXPIRES</div>
+                            <div class="badge">✨ OFFICIAL PERMANENT ATTENDANCE QR</div>
                             
                             <div class="meta-box">
-                                <div>Department: <strong>${dept}</strong> | Class: <strong>${cls} (${sem})</strong></div>
+                                <div>Department: <strong>${dept}</strong> | All Classes & Semesters</div>
                                 <div style="margin-top: 4px; font-size: 13px; color: #64748B;">Faculty In-Charge: ${faculty} | Session Code: ${sess}</div>
                             </div>
 
@@ -1880,7 +1867,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 1. Open your <em>AQ Student Portal</em> on your mobile device.<br>
                                 2. Tap <strong>Scan Attendance QR Code</strong> and allow location access.<br>
                                 3. Attendance is marked for the current day. 1 scan per student per day.<br>
-                                4. This QR code is permanent and valid across all semester dates.
+                                4. This QR code is permanent and valid across all calendar dates for lifetime.
                             </div>
                         </div>
                         <script>
@@ -1900,87 +1887,18 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadQrPngBtn.addEventListener('click', () => {
             const qrCanvasImg = qrcodeCanvas?.querySelector('canvas') || qrcodeCanvas?.querySelector('img');
             if (!qrCanvasImg) {
-                showToast('Please generate a QR code first.', 'error');
+                showToast('QR code is loading...', 'error');
                 return;
             }
             const imgData = qrCanvasImg.tagName.toLowerCase() === 'canvas' ? qrCanvasImg.toDataURL('image/png') : qrCanvasImg.src;
             const a = document.createElement('a');
             a.href = imgData;
             const dept = (activeTotpSession?.department || 'Campus').replace(/\s+/g, '_');
-            const cls = (activeTotpSession?.className || 'Class').replace(/\s+/g, '_');
-            a.download = `AQ_Permanent_QR_${dept}_${cls}.png`;
+            a.download = `AQ_Permanent_QR_${dept}.png`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             showToast('Permanent QR PNG downloaded successfully!', 'success');
-        });
-    }
-
-    const generateQrFormModal = document.getElementById('generateQrFormModal');
-
-    if (openGenerateQrModalBtn) {
-        openGenerateQrModalBtn.addEventListener('click', () => {
-            if (generateQrModal) {
-                const modalDept = document.getElementById('qrModalDepartment');
-                if (modalDept && currentUser && currentUser.department && currentUser.department !== 'Administration') {
-                    modalDept.value = currentUser.department;
-                }
-                const modalClass = document.getElementById('qrModalClass');
-                if (modalClass && !modalClass.value) {
-                    modalClass.value = 'B.Tech';
-                }
-                generateQrModal.classList.remove('hidden');
-            } else {
-                const staffQrDashboardCard = document.getElementById('staffQrDashboardCard');
-                if (staffQrDashboardCard) {
-                    staffQrDashboardCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            }
-        });
-    }
-
-    const closeGenerateQrModal = () => {
-        if (generateQrModal) generateQrModal.classList.add('hidden');
-    };
-
-    if (closeQrModalBtn) closeQrModalBtn.addEventListener('click', closeGenerateQrModal);
-    if (cancelQrModalBtn) cancelQrModalBtn.addEventListener('click', closeGenerateQrModal);
-
-    function processQrFormSubmit(department, semester, className) {
-        const subject = 'Whole Day Attendance';
-        const duration = '1440';
-
-        activeTotpSession = null; // Fresh new session ID
-        startLiveClockAndTotpLoop(subject, className, duration, department, semester);
-
-        if (generateQrModal) generateQrModal.classList.add('hidden');
-
-        if (qrResultContainer) {
-            qrResultContainer.classList.remove('hidden');
-            qrResultContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        showToast(`✨ Permanent Campus QR generated for ${department} - ${className} (${semester})!`, 'success');
-    }
-
-    if (generateQrForm) {
-        generateQrForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const department = document.getElementById('qrDepartment')?.value || (currentUser?.department || 'Computer Science');
-            const semester = document.getElementById('qrSemester')?.value || 'Semester 3';
-            const className = document.getElementById('qrClass')?.value || 'B.Tech';
-
-            processQrFormSubmit(department, semester, className);
-        });
-    }
-
-    if (generateQrFormModal) {
-        generateQrFormModal.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const department = document.getElementById('qrModalDepartment')?.value || (currentUser?.department || 'Computer Science');
-            const semester = document.getElementById('qrModalSemester')?.value || 'Semester 3';
-            const className = document.getElementById('qrModalClass')?.value || 'B.Tech';
-
-            processQrFormSubmit(department, semester, className);
         });
     }
 

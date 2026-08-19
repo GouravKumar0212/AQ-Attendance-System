@@ -85,15 +85,16 @@ def get_seconds_remaining(step: int = 15) -> int:
     now = int(time.time())
     return step - (now % step)
 
-def create_permanent_qr_payload(session_id: str, subject: str = 'Whole Day Attendance', class_name: str = 'B.Tech', department: str = 'Computer Science', semester: str = 'Semester 3', teacher_name: str = 'Faculty Staff') -> dict:
+def create_permanent_qr_payload(session_id: str = None, subject: str = 'Whole Day Attendance', class_name: str = 'All Classes', department: str = 'Computer Science', semester: str = 'All Semesters', teacher_name: str = 'Faculty Staff') -> dict:
     """
-    Task: Construct a structured JSON payload for a Permanent Campus QR Code that never expires,
-    is valid across all dates, and requires campus geolocation to mark attendance.
+    Task: Construct a structured JSON payload for a Permanent Lifetime Campus QR Code that never expires,
+    is 100% constant for a given department/staff, is valid across all dates, and requires campus geolocation.
     """
-    now = int(time.time())
+    if not session_id:
+        dept_code = "".join(c for c in (department or 'CS').upper() if c.isalnum())[:4] or 'CS'
+        session_id = f"PERM-{dept_code}-OFFICIAL"
+
     signature = generate_qr_signature(session_id, department, class_name)
-    secret_b32 = get_secret_base32(session_id)
-    token = generate_totp_token(secret_b32, step=15, current_timestamp=now)
     
     return {
         'type': 'aq_permanent_qr',
@@ -107,9 +108,7 @@ def create_permanent_qr_payload(session_id: str, subject: str = 'Whole Day Atten
         'campus_lat': DEFAULT_CAMPUS_LAT,
         'campus_lng': DEFAULT_CAMPUS_LNG,
         'never_expires': True,
-        'signature': signature,
-        'totp_token': token,
-        'timestamp': now
+        'signature': signature
     }
 
 def create_totp_payload(session_id: str, subject: str, class_name: str, department: str, teacher_name: str, step: int = 15, semester: str = '') -> dict:
