@@ -13,7 +13,22 @@ from geofence import is_within_campus
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # Explicitly load .env from script directory, current working directory, and parent directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    env_paths = [
+        os.path.join(script_dir, '.env'),
+        os.path.join(os.getcwd(), '.env'),
+        os.path.join(os.path.dirname(script_dir), '.env'),
+        os.path.join(script_dir, '.env.local')
+    ]
+    loaded_env = False
+    for p in env_paths:
+        if os.path.exists(p):
+            load_dotenv(p, override=True)
+            loaded_env = True
+            break
+    if not loaded_env:
+        load_dotenv()
 except ImportError:
     pass
 
@@ -55,13 +70,22 @@ class PgCursorWrapper:
         self.conn = conn
         self.lastrowid = None
 
+    @property
+    def description(self):
+        return self.cursor.description
+
+    @property
+    def rowcount(self):
+        return self.cursor.rowcount
+
     def execute(self, sql, params=None):
         sql_pg = sql.replace('?', '%s')
         params_tuple = tuple(params) if params is not None else ()
         
         is_insert = sql.strip().upper().startswith('INSERT')
         if is_insert and 'RETURNING' not in sql.upper():
-            query_with_returning = sql_pg + ' RETURNING id'
+            clean_sql = sql_pg.rstrip().rstrip(';')
+            query_with_returning = clean_sql + ' RETURNING id'
             try:
                 self.cursor.execute(query_with_returning, params_tuple)
                 res = self.cursor.fetchone()
@@ -71,7 +95,7 @@ class PgCursorWrapper:
                     elif hasattr(res, 'get'):
                         self.lastrowid = res.get('id')
                 return self
-            except Exception as e:
+            except Exception:
                 try:
                     self.conn.rollback()
                 except Exception:
@@ -134,6 +158,44 @@ def get_db_path():
         return tmp_db if os.path.exists('/tmp') else local_db
     return local_db
 
+def parse_db_url_to_pg_params(db_url):
+    """
+    Task: Intelligently parse and format PostgreSQL / Supabase connection strings into connection parameters.
+    Handles Direct Supabase IPv6 endpoints by automatically routing to IPv4 Supabase Connection Pooler.
+    """
+    import urllib.parse
+    if not db_url:
+        return None
+
+    if db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://', 1)
+
+    parsed = urllib.parse.urlparse(db_url)
+    user = parsed.username or 'postgres'
+    password = urllib.parse.unquote(parsed.password or '')
+    host = parsed.hostname or 'localhost'
+    port = parsed.port or 5432
+    dbname = parsed.path.lstrip('/') or 'postgres'
+
+    # If Supabase direct connection (db.<ref>.supabase.co), map to IPv4 transaction pooler for Vercel/Cloud compatibility
+    if host.startswith('db.') and host.endswith('.supabase.co'):
+        project_ref = host[3:-len('.supabase.co')]
+        host = 'aws-0-ap-northeast-1.pooler.supabase.com'
+        port = 6543
+        if not user.startswith('postgres.'):
+            user = f"postgres.{project_ref}"
+    elif 'pooler.supabase.com' in host:
+        port = parsed.port or 6543
+
+    return {
+        'user': user,
+        'password': password,
+        'host': host,
+        'port': port,
+        'dbname': dbname,
+        'sslmode': 'require'
+    }
+
 def get_db_connection():
     """
     Task: Open connection to PostgreSQL cloud database (Supabase/Vercel) or fall back to local SQLite database connection.
@@ -141,19 +203,27 @@ def get_db_connection():
     db_url = os.environ.get('DATABASE_URL') or os.environ.get('SUPABASE_DB_URL') or os.environ.get('POSTGRES_URL')
     
     if db_url and HAS_PSYCOPG2:
-        if db_url.startswith('postgres://'):
-            db_url = db_url.replace('postgres://', 'postgresql://', 1)
-        if 'lpuwgdniabfkkhdrncqg.supabase.co' in db_url:
-            db_url = db_url.replace('db.lpuwgdniabfkkhdrncqg.supabase.co', 'aws-0-ap-northeast-1.pooler.supabase.com')
-            db_url = db_url.replace('://postgres:', '://postgres.lpuwgdniabfkkhdrncqg:')
-        if 'supabase.co:5432' in db_url:
-            db_url = db_url.replace('supabase.co:5432', 'supabase.co:6543')
-
         try:
-            pg_conn = psycopg2.connect(db_url, sslmode='require' if 'supabase' in db_url or 'vercel-storage' in db_url or 'pooler' in db_url else 'prefer')
-            return PgConnWrapper(pg_conn)
+            params = parse_db_url_to_pg_params(db_url)
+            if params:
+                pg_conn = psycopg2.connect(
+                    user=params['user'],
+                    password=params['password'],
+                    host=params['host'],
+                    port=params['port'],
+                    dbname=params['dbname'],
+                    sslmode=params['sslmode'],
+                    connect_timeout=10
+                )
+                return PgConnWrapper(pg_conn)
         except Exception as e:
-            print("PostgreSQL connection error, falling back to SQLite:", e)
+            print(f"[Database] PostgreSQL connection with parsed params failed ({e}), attempting direct DSN...")
+            try:
+                clean_url = db_url.replace('postgres://', 'postgresql://', 1)
+                pg_conn = psycopg2.connect(clean_url, sslmode='require', connect_timeout=10)
+                return PgConnWrapper(pg_conn)
+            except Exception as dsn_err:
+                print(f"[Database] Direct DSN connection failed ({dsn_err}). Falling back to SQLite.")
 
     conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
@@ -163,171 +233,190 @@ def init_db():
     """
     Task: Initialize database tables (users, attendance, holidays) and seed default system administrator account if missing.
     """
-    conn = get_db_connection()
+    try:
+        conn = get_db_connection()
+    except Exception as conn_err:
+        print("[Database] Failed to open connection during init_db:", conn_err)
+        return
+
     is_pg = getattr(conn, 'is_pg', False)
     cursor = conn.cursor()
     
-    if is_pg:
-        # PostgreSQL schema
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(255) UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                full_name TEXT NOT NULL,
-                role VARCHAR(50) NOT NULL,
-                department TEXT NOT NULL DEFAULT '',
-                email TEXT NOT NULL DEFAULT '',
-                class_name TEXT NOT NULL DEFAULT '',
-                semester TEXT NOT NULL DEFAULT '',
-                roll_no TEXT NOT NULL DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT NOT NULL DEFAULT ''")
-        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS semester TEXT NOT NULL DEFAULT ''")
-        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS roll_no TEXT NOT NULL DEFAULT ''")
+    try:
+        if is_pg:
+            # PostgreSQL schema
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(255) UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    full_name TEXT NOT NULL,
+                    role VARCHAR(50) NOT NULL,
+                    department TEXT NOT NULL DEFAULT '',
+                    email TEXT NOT NULL DEFAULT '',
+                    class_name TEXT NOT NULL DEFAULT '',
+                    semester TEXT NOT NULL DEFAULT '',
+                    roll_no TEXT NOT NULL DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT NOT NULL DEFAULT ''")
+            cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS semester TEXT NOT NULL DEFAULT ''")
+            cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS roll_no TEXT NOT NULL DEFAULT ''")
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS attendance (
-                id SERIAL PRIMARY KEY,
-                student_id INTEGER NOT NULL,
-                student_name TEXT NOT NULL,
-                roll_no TEXT NOT NULL,
-                department TEXT NOT NULL,
-                class_name TEXT NOT NULL,
-                semester TEXT NOT NULL DEFAULT '',
-                subject TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                date TEXT NOT NULL,
-                time TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'Present',
-                latitude REAL,
-                longitude REAL,
-                distance_meters REAL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (student_id) REFERENCES users(id),
-                UNIQUE(student_id, date)
-            )
-        ''')
-        cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS semester TEXT NOT NULL DEFAULT ''")
-        cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS latitude REAL")
-        cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS longitude REAL")
-        cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS distance_meters REAL")
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS attendance (
+                    id SERIAL PRIMARY KEY,
+                    student_id INTEGER NOT NULL,
+                    student_name TEXT NOT NULL,
+                    roll_no TEXT NOT NULL,
+                    department TEXT NOT NULL,
+                    class_name TEXT NOT NULL,
+                    semester TEXT NOT NULL DEFAULT '',
+                    subject TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    time TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'Present',
+                    latitude REAL,
+                    longitude REAL,
+                    distance_meters REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+                    UNIQUE(student_id, date)
+                )
+            ''')
+            cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS semester TEXT NOT NULL DEFAULT ''")
+            cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS latitude REAL")
+            cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS longitude REAL")
+            cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS distance_meters REAL")
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS holidays (
-                id SERIAL PRIMARY KEY,
-                date TEXT NOT NULL,
-                title TEXT NOT NULL,
-                department TEXT NOT NULL DEFAULT 'all',
-                created_by TEXT NOT NULL DEFAULT 'Admin',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-    else:
-        # SQLite schema
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                full_name TEXT NOT NULL,
-                role TEXT NOT NULL,
-                department TEXT NOT NULL DEFAULT '',
-                email TEXT NOT NULL DEFAULT '',
-                class_name TEXT NOT NULL DEFAULT '',
-                semester TEXT NOT NULL DEFAULT '',
-                roll_no TEXT NOT NULL DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        cursor.execute("PRAGMA table_info(users)")
-        columns = [col[1] for col in cursor.fetchall()]
-        if 'class_name' not in columns:
-            cursor.execute("ALTER TABLE users ADD COLUMN class_name TEXT NOT NULL DEFAULT ''")
-        if 'semester' not in columns:
-            cursor.execute("ALTER TABLE users ADD COLUMN semester TEXT NOT NULL DEFAULT ''")
-        if 'roll_no' not in columns:
-            cursor.execute("ALTER TABLE users ADD COLUMN roll_no TEXT NOT NULL DEFAULT ''")
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS holidays (
+                    id SERIAL PRIMARY KEY,
+                    date TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    department TEXT NOT NULL DEFAULT 'all',
+                    created_by TEXT NOT NULL DEFAULT 'Admin',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+        else:
+            # SQLite schema
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    full_name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    department TEXT NOT NULL DEFAULT '',
+                    email TEXT NOT NULL DEFAULT '',
+                    class_name TEXT NOT NULL DEFAULT '',
+                    semester TEXT NOT NULL DEFAULT '',
+                    roll_no TEXT NOT NULL DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute("PRAGMA table_info(users)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if 'class_name' not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN class_name TEXT NOT NULL DEFAULT ''")
+            if 'semester' not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN semester TEXT NOT NULL DEFAULT ''")
+            if 'roll_no' not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN roll_no TEXT NOT NULL DEFAULT ''")
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS attendance (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                student_id INTEGER NOT NULL,
-                student_name TEXT NOT NULL,
-                roll_no TEXT NOT NULL,
-                department TEXT NOT NULL,
-                class_name TEXT NOT NULL,
-                semester TEXT NOT NULL DEFAULT '',
-                subject TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                date TEXT NOT NULL,
-                time TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'Present',
-                latitude REAL,
-                longitude REAL,
-                distance_meters REAL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (student_id) REFERENCES users(id),
-                UNIQUE(student_id, date)
-            )
-        ''')
-        cursor.execute("PRAGMA table_info(attendance)")
-        att_cols = [col[1] for col in cursor.fetchall()]
-        if 'semester' not in att_cols:
-            cursor.execute("ALTER TABLE attendance ADD COLUMN semester TEXT NOT NULL DEFAULT ''")
-        if 'latitude' not in att_cols:
-            cursor.execute("ALTER TABLE attendance ADD COLUMN latitude REAL")
-        if 'longitude' not in att_cols:
-            cursor.execute("ALTER TABLE attendance ADD COLUMN longitude REAL")
-        if 'distance_meters' not in att_cols:
-            cursor.execute("ALTER TABLE attendance ADD COLUMN distance_meters REAL")
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS attendance (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    student_id INTEGER NOT NULL,
+                    student_name TEXT NOT NULL,
+                    roll_no TEXT NOT NULL,
+                    department TEXT NOT NULL,
+                    class_name TEXT NOT NULL,
+                    semester TEXT NOT NULL DEFAULT '',
+                    subject TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    time TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'Present',
+                    latitude REAL,
+                    longitude REAL,
+                    distance_meters REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (student_id) REFERENCES users(id),
+                    UNIQUE(student_id, date)
+                )
+            ''')
+            cursor.execute("PRAGMA table_info(attendance)")
+            att_cols = [col[1] for col in cursor.fetchall()]
+            if 'semester' not in att_cols:
+                cursor.execute("ALTER TABLE attendance ADD COLUMN semester TEXT NOT NULL DEFAULT ''")
+            if 'latitude' not in att_cols:
+                cursor.execute("ALTER TABLE attendance ADD COLUMN latitude REAL")
+            if 'longitude' not in att_cols:
+                cursor.execute("ALTER TABLE attendance ADD COLUMN longitude REAL")
+            if 'distance_meters' not in att_cols:
+                cursor.execute("ALTER TABLE attendance ADD COLUMN distance_meters REAL")
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS holidays (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date TEXT NOT NULL,
-                title TEXT NOT NULL,
-                department TEXT NOT NULL DEFAULT 'all',
-                created_by TEXT NOT NULL DEFAULT 'Admin',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS holidays (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    department TEXT NOT NULL DEFAULT 'all',
+                    created_by TEXT NOT NULL DEFAULT 'Admin',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
 
-    # Check if admin user exists, if not create default admin
-    cursor.execute("SELECT * FROM users WHERE username = ?", ('admin',))
-    admin = cursor.fetchone()
-    if not admin:
-        default_admin_pass = generate_password_hash('admin123')
-        cursor.execute('''
-            INSERT INTO users (username, password_hash, full_name, role, department, email, class_name, semester, roll_no)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', ('admin', default_admin_pass, 'System Administrator', 'admin', 'Administration', 'admin@college.edu', '', '', ''))
+        # Check if admin user exists, if not create default admin
+        cursor.execute("SELECT * FROM users WHERE username = ?", ('admin',))
+        admin = cursor.fetchone()
+        if not admin:
+            default_admin_pass = generate_password_hash('admin123')
+            cursor.execute('''
+                INSERT INTO users (username, password_hash, full_name, role, department, email, class_name, semester, roll_no)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', ('admin', default_admin_pass, 'System Administrator', 'admin', 'Administration', 'admin@college.edu', '', '', ''))
+            conn.commit()
+
+        # Check if any student user exists, if not seed default student accounts for testing
+        cursor.execute("SELECT * FROM users WHERE role = 'student'")
+        students_exist = cursor.fetchone()
+        if not students_exist:
+            pwd = generate_password_hash('pass123')
+            sample_students = [
+                ('student1', pwd, 'Aarav Sharma', 'student', 'Computer Science', 'aarav@college.edu', 'B.Tech', 'Semester 3', 'CS2026-01'),
+                ('student2', pwd, 'Priya Patel', 'student', 'Information Technology', 'priya@college.edu', 'BCA', 'Semester 3', 'IT2026-02'),
+                ('student3', pwd, 'Rohan Verma', 'student', 'Mechanical', 'rohan@college.edu', 'B.Com', 'Semester 3', 'ME2026-03'),
+                ('student4', pwd, 'Ananya Gupta', 'student', 'Computer Science', 'ananya@college.edu', 'B.Tech', 'Semester 3', 'CS2026-04')
+            ]
+            for s in sample_students:
+                try:
+                    cursor.execute('''
+                        INSERT INTO users (username, password_hash, full_name, role, department, email, class_name, semester, roll_no)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', s)
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+
         conn.commit()
-
-    # Check if any student user exists, if not seed default student accounts for testing
-    cursor.execute("SELECT * FROM users WHERE role = 'student'")
-    students_exist = cursor.fetchone()
-    if not students_exist:
-        pwd = generate_password_hash('pass123')
-        sample_students = [
-            ('student1', pwd, 'Aarav Sharma', 'student', 'Computer Science', 'aarav@college.edu', 'B.Tech', 'Semester 3', 'CS2026-01'),
-            ('student2', pwd, 'Priya Patel', 'student', 'Information Technology', 'priya@college.edu', 'BCA', 'Semester 3', 'IT2026-02'),
-            ('student3', pwd, 'Rohan Verma', 'student', 'Mechanical', 'rohan@college.edu', 'B.Com', 'Semester 3', 'ME2026-03'),
-            ('student4', pwd, 'Ananya Gupta', 'student', 'Computer Science', 'ananya@college.edu', 'B.Tech', 'Semester 3', 'CS2026-04')
-        ]
-        for s in sample_students:
-            try:
-                cursor.execute('''
-                    INSERT INTO users (username, password_hash, full_name, role, department, email, class_name, semester, roll_no)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', s)
-            except Exception as e:
-                pass
-        conn.commit()
-    
-    conn.close()
+    except Exception as e:
+        print("[Database] Error during schema initialization:", e)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        conn.close()
 
 # Initialize DB on startup
 init_db()
