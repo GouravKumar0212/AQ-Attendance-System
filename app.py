@@ -33,6 +33,13 @@ except ImportError:
     pass
 
 try:
+    import pg8000.dbapi
+    import ssl
+    HAS_PG8000 = True
+except ImportError:
+    HAS_PG8000 = False
+
+try:
     import psycopg2
     import psycopg2.extras
     HAS_PSYCOPG2 = True
@@ -65,9 +72,10 @@ class PgRowWrapper(dict):
         return super().keys()
 
 class PgCursorWrapper:
-    def __init__(self, cursor, conn):
+    def __init__(self, cursor, conn, is_pg8000=False):
         self.cursor = cursor
         self.conn = conn
+        self.is_pg8000 = is_pg8000
         self.lastrowid = None
 
     @property
@@ -108,19 +116,30 @@ class PgCursorWrapper:
         res = self.cursor.fetchone()
         if res is None:
             return None
+        if self.is_pg8000 and self.cursor.description:
+            cols = [col[0] for col in self.cursor.description]
+            return PgRowWrapper(dict(zip(cols, res)))
         return PgRowWrapper(res)
 
     def fetchall(self):
         res = self.cursor.fetchall()
+        if not res:
+            return []
+        if self.is_pg8000 and self.cursor.description:
+            cols = [col[0] for col in self.cursor.description]
+            return [PgRowWrapper(dict(zip(cols, row))) for row in res]
         return [PgRowWrapper(row) for row in res]
 
 class PgConnWrapper:
-    def __init__(self, conn):
+    def __init__(self, conn, is_pg8000=False):
         self.raw_conn = conn
         self.is_pg = True
+        self.is_pg8000 = is_pg8000
 
     def cursor(self):
-        return PgCursorWrapper(self.raw_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor), self)
+        if self.is_pg8000:
+            return PgCursorWrapper(self.raw_conn.cursor(), self, is_pg8000=True)
+        return PgCursorWrapper(self.raw_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor), self, is_pg8000=False)
 
     def execute(self, sql, params=None):
         cur = self.cursor()
@@ -198,36 +217,91 @@ def parse_db_url_to_pg_params(db_url):
 
 def get_db_connection():
     """
-    Task: Open connection to PostgreSQL cloud database (Supabase/Vercel) or fall back to local SQLite database connection.
+    Task: Open connection to PostgreSQL cloud database (Supabase/Vercel) via pg8000 or psycopg2, or fall back to SQLite.
     """
     db_url = os.environ.get('DATABASE_URL') or os.environ.get('SUPABASE_DB_URL') or os.environ.get('POSTGRES_URL')
     
-    if db_url and HAS_PSYCOPG2:
-        try:
-            params = parse_db_url_to_pg_params(db_url)
-            if params:
-                pg_conn = psycopg2.connect(
+    if db_url:
+        params = parse_db_url_to_pg_params(db_url)
+
+        # 1. First priority: pg8000 (Pure Python, 100% reliable on Vercel Serverless / AWS Lambda)
+        if HAS_PG8000 and params:
+            try:
+                ssl_ctx = ssl.create_default_context()
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+                conn = pg8000.dbapi.connect(
                     user=params['user'],
                     password=params['password'],
                     host=params['host'],
                     port=params['port'],
-                    dbname=params['dbname'],
-                    sslmode=params['sslmode'],
-                    connect_timeout=10
+                    database=params['dbname'],
+                    ssl_context=ssl_ctx,
+                    timeout=10
                 )
-                return PgConnWrapper(pg_conn)
-        except Exception as e:
-            print(f"[Database] PostgreSQL connection with parsed params failed ({e}), attempting direct DSN...")
+                return PgConnWrapper(conn, is_pg8000=True)
+            except Exception as pg8_err:
+                print(f"[Database] pg8000 connection failed: {pg8_err}")
+
+        # 2. Second priority: psycopg2
+        if HAS_PSYCOPG2:
             try:
-                clean_url = db_url.replace('postgres://', 'postgresql://', 1)
-                pg_conn = psycopg2.connect(clean_url, sslmode='require', connect_timeout=10)
-                return PgConnWrapper(pg_conn)
-            except Exception as dsn_err:
-                print(f"[Database] Direct DSN connection failed ({dsn_err}). Falling back to SQLite.")
+                if params:
+                    pg_conn = psycopg2.connect(
+                        user=params['user'],
+                        password=params['password'],
+                        host=params['host'],
+                        port=params['port'],
+                        dbname=params['dbname'],
+                        sslmode=params['sslmode'],
+                        connect_timeout=10
+                    )
+                    return PgConnWrapper(pg_conn, is_pg8000=False)
+            except Exception as e:
+                print(f"[Database] psycopg2 connection failed ({e}), attempting direct DSN...")
+                try:
+                    clean_url = db_url.replace('postgres://', 'postgresql://', 1)
+                    pg_conn = psycopg2.connect(clean_url, sslmode='require', connect_timeout=10)
+                    return PgConnWrapper(pg_conn, is_pg8000=False)
+                except Exception as dsn_err:
+                    print(f"[Database] Direct DSN connection failed ({dsn_err}).")
 
     conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     return conn
+
+@app.route('/api/db-status', methods=['GET'])
+def get_db_status():
+    """
+    Task: Return current database engine, connection state, and record count for diagnostics.
+    """
+    try:
+        conn = get_db_connection()
+        is_pg = getattr(conn, 'is_pg', False)
+        is_pg8000 = getattr(conn, 'is_pg8000', False)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM users")
+        row = cur.fetchone()
+        user_count = row[0] if isinstance(row, (tuple, list)) else (row.get('count') if hasattr(row, 'get') else 0)
+        conn.close()
+
+        db_type = "PostgreSQL (Supabase)" if is_pg else "SQLite (Local/Fallback)"
+        driver = "pg8000 (Pure Python)" if is_pg8000 else ("psycopg2" if is_pg else "sqlite3")
+
+        return jsonify({
+            'status': 'Connected',
+            'database': db_type,
+            'driver': driver,
+            'is_postgresql': is_pg,
+            'users_in_db': user_count,
+            'has_database_url_env': bool(os.environ.get('DATABASE_URL') or os.environ.get('SUPABASE_DB_URL') or os.environ.get('POSTGRES_URL'))
+        })
+    except Exception as err:
+        return jsonify({
+            'status': 'Error',
+            'error': str(err),
+            'has_database_url_env': bool(os.environ.get('DATABASE_URL') or os.environ.get('SUPABASE_DB_URL') or os.environ.get('POSTGRES_URL'))
+        }), 500
 
 def init_db():
     """

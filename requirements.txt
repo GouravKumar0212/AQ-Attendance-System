@@ -1,7 +1,10 @@
 Flask>=3.0.0
 gunicorn>=21.2.0
 Werkzeug>=3.0.0
+pg8000>=1.31.0
+scramp>=1.4.5
 psycopg2-binary>=2.9.9
 python-dotenv>=1.0.0
 qrcode>=7.4.2
 pillow>=10.0.0
+
