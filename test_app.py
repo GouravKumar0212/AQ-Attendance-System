@@ -508,33 +508,9 @@ class AQTestCase(unittest.TestCase):
         self.assertIn('Roll No', first_line)
         self.assertIn('Status', first_line)
 
-    def test_18_share_attendance_report_email(self):
-        """Test share report to any recipient email endpoint."""
-        self.login('admin', 'admin123')
-
-        payload = {
-            'recipient_email': 'faculty_dean@university.edu',
-            'subject': 'Monthly Attendance Summary - CS Dept',
-            'notes': 'Please find the monthly report attached.',
-            'department': 'Computer Science',
-            'semester': 'Semester 4',
-            'include_csv': True,
-            'include_html': True
-        }
-
-        res = self.app.post('/api/attendance/share-email', data=json.dumps(payload), content_type='application/json')
-        self.assertEqual(res.status_code, 200)
-        data = json.loads(res.data)
-        self.assertTrue(data['success'])
-        self.assertEqual(data['recipient'], 'faculty_dean@university.edu')
-        self.assertIn('records_count', data)
-
-        # Missing recipient email should fail
-        res_fail = self.app.post('/api/attendance/share-email', data=json.dumps({'recipient_email': ''}), content_type='application/json')
-        self.assertEqual(res_fail.status_code, 400)
-
 if __name__ == '__main__':
     import time
     unittest.main()
+
 
 

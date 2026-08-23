@@ -354,17 +354,6 @@
                                 <span id="adminAdvFilterBadge" class="filter-count-badge hidden">0</span>
                             </button>
 
-                            <button type="button" class="btn btn-primary open-share-email-btn"
-                                data-source="admin"
-                                title="Share Attendance Report via Email / Gmail"
-                                style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; background: linear-gradient(135deg, #EA4335 0%, #D93025 100%); border: none; padding: 0.5rem 1rem; color: #FFFFFF; box-shadow: 0 2px 8px rgba(234, 67, 53, 0.25);">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                                    <polyline points="22,6 12,13 2,6"></polyline>
-                                </svg>
-                                <span>Share via Gmail</span>
-                            </button>
-
                             <button type="button" id="exportCsvBtn" class="btn btn-primary"
                                 title="Download Excel / CSV File for Department"
                                 style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; background: #10B981; border: none; padding: 0.5rem 1rem;">
@@ -728,17 +717,6 @@
                                 </svg>
                                 <span>Advanced Filters</span>
                                 <span id="staffAdvFilterBadge" class="filter-count-badge hidden">0</span>
-                            </button>
-
-                            <button type="button" class="btn btn-primary open-share-email-btn"
-                                data-source="staff"
-                                title="Share Attendance Report via Email / Gmail"
-                                style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; background: linear-gradient(135deg, #EA4335 0%, #D93025 100%); border: none; padding: 0.5rem 1rem; color: #FFFFFF; box-shadow: 0 2px 8px rgba(234, 67, 53, 0.25);">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                                    <polyline points="22,6 12,13 2,6"></polyline>
-                                </svg>
-                                <span>Share via Gmail</span>
                             </button>
 
                             <button type="button" class="btn btn-primary open-manual-att-modal-btn"
@@ -1538,90 +1516,6 @@
                     <button type="button" class="btn btn-secondary" id="cancelHolidayBtn">Cancel</button>
                     <button type="submit" class="btn btn-primary" style="background: #8B5CF6; border: none;">Set Holiday
                         (H)</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-
-    <!-- Share Attendance Report Modal (Admin & Staff -> Email / Gmail) -->
-    <div id="shareReportModal" class="modal-overlay hidden">
-        <div class="modal-container modal-lg">
-            <div class="modal-header" style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color: #FFFFFF; border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 1.25rem 1.5rem;">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(234, 67, 53, 0.2); display: flex; align-items: center; justify-content: center; color: #EA4335;">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                            <polyline points="22,6 12,13 2,6"></polyline>
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF; margin: 0;">Share Report via Gmail / Email</h3>
-                        <p style="font-size: 0.85rem; color: #94A3B8; margin: 0.2rem 0 0 0;">Deliver formatted attendance stats and CSV spreadsheet directly to any recipient</p>
-                    </div>
-                </div>
-                <button type="button" class="btn-icon close-modal-btn" id="closeShareReportModalBtn" style="color: #FFFFFF;">&times;</button>
-            </div>
-
-            <form id="shareReportForm">
-                <div class="modal-body" style="padding: 1.5rem;">
-                    <!-- Filter Context Summary Banner -->
-                    <div id="shareReportFilterContext" style="margin-bottom: 1.25rem; padding: 0.85rem 1rem; background: #F8FAFC; border: 1.5px solid var(--color-border); border-radius: var(--radius-md); font-size: 0.88rem;">
-                        <div style="font-weight: 800; color: var(--color-navy-dark); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem;">
-                            <span>📋 Report Context (Currently Applied Filters):</span>
-                        </div>
-                        <div id="shareReportFilterBadges" style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                            <span class="badge badge-staff" id="shareContextDept">Dept: All</span>
-                            <span class="badge badge-info" id="shareContextSem">Sem: All</span>
-                            <span class="badge badge-secondary" id="shareContextDate">Date: All</span>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="shareRecipientEmail" style="font-weight: 800; color: var(--color-navy-dark);">Recipient Email Address *</label>
-                        <div class="input-with-icon">
-                            <svg class="input-lead-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                                <polyline points="22,6 12,13 2,6"></polyline>
-                            </svg>
-                            <input type="email" id="shareRecipientEmail" placeholder="e.g. principal@college.edu or name@gmail.com" required autocomplete="email">
-                        </div>
-                        <small style="color: var(--color-text-muted); font-size: 0.78rem; margin-top: 0.25rem; display: block;">Supports any standard Gmail, Google Workspace, or institutional email address.</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="shareReportSubject" style="font-weight: 800; color: var(--color-navy-dark);">Email Subject Line</label>
-                        <input type="text" id="shareReportSubject" placeholder="e.g. AQ Attendance Report • Computer Science (Semester 4)" class="search-input" style="width: 100%;">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="shareReportNotes" style="font-weight: 800; color: var(--color-navy-dark);">Remarks / Additional Notes (Optional)</label>
-                        <textarea id="shareReportNotes" rows="3" placeholder="Add custom notes or instructions for the recipient (e.g. Please find the monthly attendance deficiency report for review)..." style="width: 100%; padding: 0.75rem; border-radius: var(--radius-sm); border: 1.5px solid var(--color-border); font-family: inherit; font-size: 0.9rem; resize: vertical;"></textarea>
-                    </div>
-
-                    <div style="margin-top: 1rem; padding: 0.85rem 1rem; background: #F1F5F9; border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 0.6rem;">
-                        <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.88rem; font-weight: 700; color: var(--color-navy-dark);">
-                            <input type="checkbox" id="shareIncludeCsv" checked style="width: 16px; height: 16px; accent-color: #2563EB;">
-                            <span>Attach Full CSV Spreadsheet (.csv file for Microsoft Excel / Google Sheets)</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.88rem; font-weight: 700; color: var(--color-navy-dark);">
-                            <input type="checkbox" id="shareIncludeHtml" checked style="width: 16px; height: 16px; accent-color: #2563EB;">
-                            <span>Include High-Definition Visual Summary & Attendance Table in Email Body</span>
-                        </label>
-                    </div>
-
-                    <div id="shareReportError" class="alert alert-error hidden" style="margin-top: 1rem;"></div>
-                </div>
-
-                <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-                    <button type="button" class="btn btn-secondary" id="cancelShareReportBtn">Cancel</button>
-                    <button type="submit" id="submitShareEmailBtn" class="btn btn-primary" style="background: linear-gradient(135deg, #EA4335 0%, #D93025 100%); border: none; font-weight: 800; display: inline-flex; align-items: center; gap: 0.5rem;">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <line x1="22" y1="2" x2="11" y2="13"></line>
-                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                        </svg>
-                        <span id="submitShareEmailText">Send Report via Gmail</span>
-                    </button>
                 </div>
             </form>
         </div>
