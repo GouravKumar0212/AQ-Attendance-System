@@ -506,6 +506,86 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Staff Department Students Controller (with Semester Filter & Search) ---
+    const staffStudentSemesterFilter = document.getElementById('staffStudentSemesterFilter');
+    const staffStudentSearchInput = document.getElementById('staffStudentSearchInput');
+    const staffStudentCountBadge = document.getElementById('staffStudentCountBadge');
+
+    if (staffStudentSemesterFilter) {
+        staffStudentSemesterFilter.addEventListener('change', () => fetchStaffDepartmentStudents());
+    }
+    if (staffStudentSearchInput) {
+        staffStudentSearchInput.addEventListener('input', () => fetchStaffDepartmentStudents());
+    }
+
+    async function fetchStaffDepartmentStudents() {
+        if (!currentUser || (currentUser.role !== 'staff' && currentUser.role !== 'admin')) return;
+
+        const dept = currentUser.department || 'all';
+        const semester = staffStudentSemesterFilter ? staffStudentSemesterFilter.value : 'all';
+        const search = staffStudentSearchInput ? staffStudentSearchInput.value.trim() : '';
+
+        try {
+            const url = `/api/staff/students?department=${encodeURIComponent(dept)}&semester=${encodeURIComponent(semester)}&search=${encodeURIComponent(search)}`;
+            const response = await fetch(url);
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const students = data.students || [];
+
+            if (staffStudentCountBadge) {
+                staffStudentCountBadge.textContent = `${students.length} Student${students.length === 1 ? '' : 's'}`;
+            }
+
+            staffStudentTableBody.innerHTML = '';
+            staffStudentMobileCardsContainer.innerHTML = '';
+
+            if (students.length === 0) {
+                noStaffStudentsState.classList.remove('hidden');
+                staffStudentTableBody.parentElement.classList.add('hidden');
+                staffStudentMobileCardsContainer.classList.add('hidden');
+            } else {
+                noStaffStudentsState.classList.add('hidden');
+                staffStudentTableBody.parentElement.classList.remove('hidden');
+                staffStudentMobileCardsContainer.classList.remove('hidden');
+
+                students.forEach(s => {
+                    // Table row
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${escapeHtml(s.full_name)}</strong></td>
+                        <td><code>${escapeHtml(s.roll_no || '-')}</code></td>
+                        <td>${escapeHtml(s.class_name || '-')}</td>
+                        <td>${escapeHtml(s.semester || '-')}</td>
+                        <td>${escapeHtml(s.department || '-')}</td>
+                        <td>${escapeHtml(s.email || '-')}</td>
+                        <td><span class="badge badge-active">Enrolled</span></td>
+                    `;
+                    staffStudentTableBody.appendChild(tr);
+
+                    // Mobile card
+                    const card = document.createElement('div');
+                    card.className = 'user-mobile-card';
+                    card.innerHTML = `
+                        <div class="mobile-card-row">
+                            <div class="mobile-card-title">${escapeHtml(s.full_name)}</div>
+                            <span class="badge badge-active">Enrolled</span>
+                        </div>
+                        <div class="mobile-card-detail">
+                            <strong>Roll No:</strong> <code>${escapeHtml(s.roll_no || '-')}</code> | <strong>Class:</strong> ${escapeHtml(s.class_name || '-')} (${escapeHtml(s.semester || '-')})
+                        </div>
+                        <div class="mobile-card-detail">
+                            <strong>Dept:</strong> ${escapeHtml(s.department || '-')} | <strong>Email:</strong> ${escapeHtml(s.email || '-')}
+                        </div>
+                    `;
+                    staffStudentMobileCardsContainer.appendChild(card);
+                });
+            }
+        } catch (e) {
+            console.error('Failed to load department students:', e);
+        }
+    }
+
     // Render Staff View
     async function renderStaffDashboard() {
         staffFullName.textContent = currentUser.full_name;
@@ -515,61 +595,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Automatically display staff member's permanent lifetime QR code immediately on login or refresh
         loadStaffPermanentQr();
 
-        try {
-            const response = await fetch('/api/staff/students');
-            if (response.ok) {
-                const data = await response.json();
-                const students = data.students || [];
-
-                staffStudentTableBody.innerHTML = '';
-                staffStudentMobileCardsContainer.innerHTML = '';
-
-                if (students.length === 0) {
-                    noStaffStudentsState.classList.remove('hidden');
-                    staffStudentTableBody.parentElement.classList.add('hidden');
-                    staffStudentMobileCardsContainer.classList.add('hidden');
-                } else {
-                    noStaffStudentsState.classList.add('hidden');
-                    staffStudentTableBody.parentElement.classList.remove('hidden');
-                    staffStudentMobileCardsContainer.classList.remove('hidden');
-
-                    students.forEach(s => {
-                        // Table row
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td><strong>${escapeHtml(s.full_name)}</strong></td>
-                            <td><code>${escapeHtml(s.roll_no || '-')}</code></td>
-                            <td>${escapeHtml(s.class_name || '-')}</td>
-                            <td>${escapeHtml(s.semester || '-')}</td>
-                            <td>${escapeHtml(s.department || '-')}</td>
-                            <td>${escapeHtml(s.email || '-')}</td>
-                            <td><span class="badge badge-active">Enrolled</span></td>
-                        `;
-                        staffStudentTableBody.appendChild(tr);
-
-                        // Mobile card
-                        const card = document.createElement('div');
-                        card.className = 'user-mobile-card';
-                        card.innerHTML = `
-                            <div class="mobile-card-row">
-                                <div class="mobile-card-title">${escapeHtml(s.full_name)}</div>
-                                <span class="badge badge-active">Enrolled</span>
-                            </div>
-                            <div class="mobile-card-detail">
-                                <strong>Roll No:</strong> <code>${escapeHtml(s.roll_no || '-')}</code> | <strong>Class:</strong> ${escapeHtml(s.class_name || '-')} (${escapeHtml(s.semester || '-')})
-                            </div>
-                            <div class="mobile-card-detail">
-                                <strong>Dept:</strong> ${escapeHtml(s.department || '-')} | <strong>Email:</strong> ${escapeHtml(s.email || '-')}
-                            </div>
-                        `;
-                        staffStudentMobileCardsContainer.appendChild(card);
-                    });
-                }
-            }
-        } catch (e) {
-            console.error('Failed to load department students:', e);
-        }
+        // Fetch department students with current semester filter
+        fetchStaffDepartmentStudents();
     }
+
 
     // Render Student View
     function renderStudentDashboard() {
@@ -1241,7 +1270,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td><strong>${escapeHtml(r.subject)}</strong></td>
                     <td>${escapeHtml(r.date)}</td>
                     <td>${escapeHtml(r.time)}</td>
-                    <td><span class="badge badge-staff">${escapeHtml(r.session_id)}</span></td>
                     <td>${escapeHtml(r.department || '-')}</td>
                     <td>${renderGpsBadge(r)}</td>
                     <td>${renderDynamicStatusBadge(r.status)}</td>
@@ -1258,7 +1286,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div style="font-size: 0.85rem; color: var(--color-text-muted); display: grid; gap: 0.25rem;">
                         <div><strong>Class:</strong> ${escapeHtml(r.class_name)}</div>
-                        <div><strong>Session:</strong> ${escapeHtml(r.session_id)}</div>
                         <div><strong>Date & Time:</strong> ${escapeHtml(r.date)} at ${escapeHtml(r.time)}</div>
                         <div><strong>GPS Location:</strong> ${renderGpsBadge(r)}</div>
                     </div>
@@ -1269,36 +1296,124 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-    // --- Staff Department Attendance Controller ---
+    // --- Staff Department Attendance Controller (Normal & Advanced Filters) ---
     const staffAttendanceDeptFilter = document.getElementById('staffAttendanceDeptFilter');
     const staffAttendanceDateFilter = document.getElementById('staffAttendanceDateFilter');
     const staffAttendanceSemesterFilter = document.getElementById('staffAttendanceSemesterFilter');
     const staffAttendanceSubjectFilter = document.getElementById('staffAttendanceSubjectFilter');
     const staffExportCsvBtn = document.getElementById('staffExportCsvBtn');
 
+    // Staff Advanced Filter Elements
+    const toggleStaffAdvFiltersBtn = document.getElementById('toggleStaffAdvFiltersBtn');
+    const staffAdvancedFilterPanel = document.getElementById('staffAdvancedFilterPanel');
+    const staffAdvFilterBadge = document.getElementById('staffAdvFilterBadge');
+    const staffResetFiltersBtn = document.getElementById('staffResetFiltersBtn');
+    const staffFromDateFilter = document.getElementById('staffFromDateFilter');
+    const staffToDateFilter = document.getElementById('staffToDateFilter');
+    const staffStatusFilter = document.getElementById('staffStatusFilter');
+    const staffClassFilter = document.getElementById('staffClassFilter');
+    const staffThresholdFilter = document.getElementById('staffThresholdFilter');
+
+    if (toggleStaffAdvFiltersBtn && staffAdvancedFilterPanel) {
+        toggleStaffAdvFiltersBtn.addEventListener('click', () => {
+            staffAdvancedFilterPanel.classList.toggle('hidden');
+            const isVisible = !staffAdvancedFilterPanel.classList.contains('hidden');
+            toggleStaffAdvFiltersBtn.style.background = isVisible ? '#EFF6FF' : '#FFFFFF';
+            toggleStaffAdvFiltersBtn.style.borderColor = isVisible ? '#2563EB' : 'var(--color-border)';
+        });
+    }
+
+    if (staffResetFiltersBtn) {
+        staffResetFiltersBtn.addEventListener('click', () => {
+            if (staffAttendanceDeptFilter && currentUser && currentUser.department) {
+                staffAttendanceDeptFilter.value = currentUser.department;
+            } else if (staffAttendanceDeptFilter) {
+                staffAttendanceDeptFilter.value = 'all';
+            }
+            if (staffAttendanceDateFilter) staffAttendanceDateFilter.value = '';
+            if (staffAttendanceSemesterFilter) staffAttendanceSemesterFilter.value = 'all';
+            if (staffAttendanceSubjectFilter) staffAttendanceSubjectFilter.value = '';
+            if (staffFromDateFilter) staffFromDateFilter.value = '';
+            if (staffToDateFilter) staffToDateFilter.value = '';
+            if (staffStatusFilter) staffStatusFilter.value = 'all';
+            if (staffClassFilter) staffClassFilter.value = 'all';
+            if (staffThresholdFilter) staffThresholdFilter.value = 'all';
+            fetchStaffAttendance();
+            showToast('Staff attendance filters reset', 'info');
+        });
+    }
+
     if (staffAttendanceDeptFilter) staffAttendanceDeptFilter.addEventListener('change', fetchStaffAttendance);
     if (staffAttendanceDateFilter) staffAttendanceDateFilter.addEventListener('change', fetchStaffAttendance);
     if (staffAttendanceSemesterFilter) staffAttendanceSemesterFilter.addEventListener('change', fetchStaffAttendance);
     if (staffAttendanceSubjectFilter) staffAttendanceSubjectFilter.addEventListener('input', fetchStaffAttendance);
 
+    if (staffFromDateFilter) staffFromDateFilter.addEventListener('change', fetchStaffAttendance);
+    if (staffToDateFilter) staffToDateFilter.addEventListener('change', fetchStaffAttendance);
+    if (staffStatusFilter) staffStatusFilter.addEventListener('change', fetchStaffAttendance);
+    if (staffClassFilter) staffClassFilter.addEventListener('change', fetchStaffAttendance);
+    if (staffThresholdFilter) staffThresholdFilter.addEventListener('change', fetchStaffAttendance);
+
+    function getStaffActiveFilters() {
+        const dept = staffAttendanceDeptFilter ? staffAttendanceDeptFilter.value : ((currentUser && currentUser.department) ? currentUser.department : 'all');
+        const date = staffAttendanceDateFilter ? staffAttendanceDateFilter.value : '';
+        const semester = staffAttendanceSemesterFilter ? staffAttendanceSemesterFilter.value : 'all';
+        const subject = staffAttendanceSubjectFilter ? staffAttendanceSubjectFilter.value.trim() : '';
+        const from_date = staffFromDateFilter ? staffFromDateFilter.value : '';
+        const to_date = staffToDateFilter ? staffToDateFilter.value : '';
+        const status = staffStatusFilter ? staffStatusFilter.value : 'all';
+        const class_name = staffClassFilter ? staffClassFilter.value : 'all';
+        const threshold = staffThresholdFilter ? staffThresholdFilter.value : 'all';
+
+        let advCount = 0;
+        if (from_date) advCount++;
+        if (to_date) advCount++;
+        if (status && status !== 'all') advCount++;
+        if (class_name && class_name !== 'all') advCount++;
+        if (threshold && threshold !== 'all') advCount++;
+
+        if (staffAdvFilterBadge) {
+            if (advCount > 0) {
+                staffAdvFilterBadge.textContent = advCount;
+                staffAdvFilterBadge.classList.remove('hidden');
+            } else {
+                staffAdvFilterBadge.classList.add('hidden');
+            }
+        }
+
+        return { dept, date, semester, subject, from_date, to_date, status, class_name, threshold };
+    }
+
     if (staffExportCsvBtn) {
-        if (staffExportCsvBtn) staffExportCsvBtn.addEventListener('click', () => {
-            const dept = staffAttendanceDeptFilter ? staffAttendanceDeptFilter.value : ((currentUser && currentUser.department) ? currentUser.department : 'all');
-            const semester = staffAttendanceSemesterFilter ? staffAttendanceSemesterFilter.value : 'all';
-            window.location.href = `/api/admin/export-attendance?department=${encodeURIComponent(dept)}&semester=${encodeURIComponent(semester)}`;
-            showToast('Downloading Department Attendance Report...', 'success');
+        staffExportCsvBtn.addEventListener('click', () => {
+            const f = getStaffActiveFilters();
+            let url = `/api/admin/export-attendance?department=${encodeURIComponent(f.dept)}&semester=${encodeURIComponent(f.semester)}`;
+            if (f.date) url += `&date=${encodeURIComponent(f.date)}`;
+            if (f.from_date) url += `&from_date=${encodeURIComponent(f.from_date)}`;
+            if (f.to_date) url += `&to_date=${encodeURIComponent(f.to_date)}`;
+            if (f.status && f.status !== 'all') url += `&status=${encodeURIComponent(f.status)}`;
+            if (f.class_name && f.class_name !== 'all') url += `&class_name=${encodeURIComponent(f.class_name)}`;
+            if (f.threshold && f.threshold !== 'all') url += `&threshold=${encodeURIComponent(f.threshold)}`;
+            if (f.subject) url += `&subject=${encodeURIComponent(f.subject)}`;
+
+            window.location.href = url;
+            showToast('Downloading Filtered Department Attendance Report...', 'success');
         });
     }
 
     async function fetchStaffAttendance() {
         if (!currentUser || (currentUser.role !== 'staff' && currentUser.role !== 'admin')) return;
-        const dept = staffAttendanceDeptFilter ? staffAttendanceDeptFilter.value : '';
-        const date = staffAttendanceDateFilter ? staffAttendanceDateFilter.value : '';
-        const semester = staffAttendanceSemesterFilter ? staffAttendanceSemesterFilter.value : 'all';
-        const subject = staffAttendanceSubjectFilter ? staffAttendanceSubjectFilter.value.trim() : '';
+        const f = getStaffActiveFilters();
 
         try {
-            const res = await fetch(`/api/staff/attendance?department=${encodeURIComponent(dept)}&date=${encodeURIComponent(date)}&semester=${encodeURIComponent(semester)}&subject=${encodeURIComponent(subject)}`);
+            let url = `/api/staff/attendance?department=${encodeURIComponent(f.dept)}&date=${encodeURIComponent(f.date)}&semester=${encodeURIComponent(f.semester)}&subject=${encodeURIComponent(f.subject)}`;
+            if (f.from_date) url += `&from_date=${encodeURIComponent(f.from_date)}`;
+            if (f.to_date) url += `&to_date=${encodeURIComponent(f.to_date)}`;
+            if (f.status && f.status !== 'all') url += `&status=${encodeURIComponent(f.status)}`;
+            if (f.class_name && f.class_name !== 'all') url += `&class_name=${encodeURIComponent(f.class_name)}`;
+            if (f.threshold && f.threshold !== 'all') url += `&threshold=${encodeURIComponent(f.threshold)}`;
+
+            const res = await fetch(url);
             const data = await res.json();
             if (!res.ok) return;
 
@@ -1307,6 +1422,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error fetching staff attendance', err);
         }
     }
+
 
 
 
@@ -1562,7 +1678,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${escapeHtml(r.class_name)}</td>
                     <td>${escapeHtml(r.semester || '-')}</td>
                     <td>${escapeHtml(r.subject)}</td>
-                    <td><span class="badge badge-staff">${escapeHtml(r.session_id)}</span></td>
                     <td>${escapeHtml(r.date)} • ${escapeHtml(r.time)}</td>
                     <td>${renderGpsBadge(r)}</td>
                     <td>${renderStatusOverrideSelect(r)}</td>
@@ -1579,7 +1694,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div style="font-size: 0.85rem; color: var(--color-text-muted); display: grid; gap: 0.25rem;">
                         <div><strong>Class & Semester:</strong> ${escapeHtml(r.class_name)} (${escapeHtml(r.semester || '-')}) • ${escapeHtml(r.subject)}</div>
-                        <div><strong>Session ID:</strong> ${escapeHtml(r.session_id)}</div>
                         <div><strong>Date & Time:</strong> ${escapeHtml(r.date)} at ${escapeHtml(r.time)}</div>
                         <div><strong>GPS Location:</strong> ${renderGpsBadge(r)}</div>
                     </div>
@@ -1589,38 +1703,120 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- Admin Attendance Reports & Export Hub ---
+    // --- Admin Attendance Reports & Export Hub (Normal & Advanced Filters) ---
     const adminDeptFilter = document.getElementById('adminDeptFilter');
     const adminDateFilter = document.getElementById('adminDateFilter');
     const adminSemesterFilter = document.getElementById('adminSemesterFilter');
     const adminAttendanceSearch = document.getElementById('adminAttendanceSearch');
     const exportCsvBtn = document.getElementById('exportCsvBtn');
 
+    // Admin Advanced Filter Elements
+    const toggleAdminAdvFiltersBtn = document.getElementById('toggleAdminAdvFiltersBtn');
+    const adminAdvancedFilterPanel = document.getElementById('adminAdvancedFilterPanel');
+    const adminAdvFilterBadge = document.getElementById('adminAdvFilterBadge');
+    const adminResetFiltersBtn = document.getElementById('adminResetFiltersBtn');
+    const adminFromDateFilter = document.getElementById('adminFromDateFilter');
+    const adminToDateFilter = document.getElementById('adminToDateFilter');
+    const adminStatusFilter = document.getElementById('adminStatusFilter');
+    const adminClassFilter = document.getElementById('adminClassFilter');
+    const adminThresholdFilter = document.getElementById('adminThresholdFilter');
+
+    if (toggleAdminAdvFiltersBtn && adminAdvancedFilterPanel) {
+        toggleAdminAdvFiltersBtn.addEventListener('click', () => {
+            adminAdvancedFilterPanel.classList.toggle('hidden');
+            const isVisible = !adminAdvancedFilterPanel.classList.contains('hidden');
+            toggleAdminAdvFiltersBtn.style.background = isVisible ? '#EFF6FF' : '#FFFFFF';
+            toggleAdminAdvFiltersBtn.style.borderColor = isVisible ? '#2563EB' : 'var(--color-border)';
+        });
+    }
+
+    if (adminResetFiltersBtn) {
+        adminResetFiltersBtn.addEventListener('click', () => {
+            if (adminDeptFilter) adminDeptFilter.value = 'all';
+            if (adminDateFilter) adminDateFilter.value = '';
+            if (adminSemesterFilter) adminSemesterFilter.value = 'all';
+            if (adminAttendanceSearch) adminAttendanceSearch.value = '';
+            if (adminFromDateFilter) adminFromDateFilter.value = '';
+            if (adminToDateFilter) adminToDateFilter.value = '';
+            if (adminStatusFilter) adminStatusFilter.value = 'all';
+            if (adminClassFilter) adminClassFilter.value = 'all';
+            if (adminThresholdFilter) adminThresholdFilter.value = 'all';
+            fetchAdminAttendance();
+            showToast('Admin attendance filters reset', 'info');
+        });
+    }
+
     if (adminDeptFilter) adminDeptFilter.addEventListener('change', fetchAdminAttendance);
     if (adminDateFilter) adminDateFilter.addEventListener('change', fetchAdminAttendance);
     if (adminSemesterFilter) adminSemesterFilter.addEventListener('change', fetchAdminAttendance);
     if (adminAttendanceSearch) adminAttendanceSearch.addEventListener('input', fetchAdminAttendance);
 
-    if (exportCsvBtn) {
-        if (exportCsvBtn) exportCsvBtn.addEventListener('click', () => {
-            const dept = adminDeptFilter ? adminDeptFilter.value : 'all';
-            const date = adminDateFilter ? adminDateFilter.value : '';
-            const semester = adminSemesterFilter ? adminSemesterFilter.value : 'all';
-            window.location.href = `/api/admin/export-attendance?department=${encodeURIComponent(dept)}&date=${encodeURIComponent(date)}&semester=${encodeURIComponent(semester)}`;
-            showToast('Downloading Excel / CSV Attendance Report...', 'success');
-        });
-    }
+    if (adminFromDateFilter) adminFromDateFilter.addEventListener('change', fetchAdminAttendance);
+    if (adminToDateFilter) adminToDateFilter.addEventListener('change', fetchAdminAttendance);
+    if (adminStatusFilter) adminStatusFilter.addEventListener('change', fetchAdminAttendance);
+    if (adminClassFilter) adminClassFilter.addEventListener('change', fetchAdminAttendance);
+    if (adminThresholdFilter) adminThresholdFilter.addEventListener('change', fetchAdminAttendance);
 
-
-    async function fetchAdminAttendance() {
-        if (!currentUser || currentUser.role !== 'admin') return;
+    function getAdminActiveFilters() {
         const dept = adminDeptFilter ? adminDeptFilter.value : 'all';
         const date = adminDateFilter ? adminDateFilter.value : '';
         const semester = adminSemesterFilter ? adminSemesterFilter.value : 'all';
         const search = adminAttendanceSearch ? adminAttendanceSearch.value.trim() : '';
+        const from_date = adminFromDateFilter ? adminFromDateFilter.value : '';
+        const to_date = adminToDateFilter ? adminToDateFilter.value : '';
+        const status = adminStatusFilter ? adminStatusFilter.value : 'all';
+        const class_name = adminClassFilter ? adminClassFilter.value : 'all';
+        const threshold = adminThresholdFilter ? adminThresholdFilter.value : 'all';
+
+        let advCount = 0;
+        if (from_date) advCount++;
+        if (to_date) advCount++;
+        if (status && status !== 'all') advCount++;
+        if (class_name && class_name !== 'all') advCount++;
+        if (threshold && threshold !== 'all') advCount++;
+
+        if (adminAdvFilterBadge) {
+            if (advCount > 0) {
+                adminAdvFilterBadge.textContent = advCount;
+                adminAdvFilterBadge.classList.remove('hidden');
+            } else {
+                adminAdvFilterBadge.classList.add('hidden');
+            }
+        }
+
+        return { dept, date, semester, search, from_date, to_date, status, class_name, threshold };
+    }
+
+    if (exportCsvBtn) {
+        exportCsvBtn.addEventListener('click', () => {
+            const f = getAdminActiveFilters();
+            let url = `/api/admin/export-attendance?department=${encodeURIComponent(f.dept)}&semester=${encodeURIComponent(f.semester)}`;
+            if (f.date) url += `&date=${encodeURIComponent(f.date)}`;
+            if (f.from_date) url += `&from_date=${encodeURIComponent(f.from_date)}`;
+            if (f.to_date) url += `&to_date=${encodeURIComponent(f.to_date)}`;
+            if (f.status && f.status !== 'all') url += `&status=${encodeURIComponent(f.status)}`;
+            if (f.class_name && f.class_name !== 'all') url += `&class_name=${encodeURIComponent(f.class_name)}`;
+            if (f.threshold && f.threshold !== 'all') url += `&threshold=${encodeURIComponent(f.threshold)}`;
+            if (f.search) url += `&search=${encodeURIComponent(f.search)}`;
+
+            window.location.href = url;
+            showToast('Downloading Filtered Excel / CSV Attendance Report...', 'success');
+        });
+    }
+
+    async function fetchAdminAttendance() {
+        if (!currentUser || currentUser.role !== 'admin') return;
+        const f = getAdminActiveFilters();
 
         try {
-            const res = await fetch(`/api/admin/attendance?department=${encodeURIComponent(dept)}&date=${encodeURIComponent(date)}&semester=${encodeURIComponent(semester)}&search=${encodeURIComponent(search)}`);
+            let url = `/api/admin/attendance?department=${encodeURIComponent(f.dept)}&date=${encodeURIComponent(f.date)}&semester=${encodeURIComponent(f.semester)}&search=${encodeURIComponent(f.search)}`;
+            if (f.from_date) url += `&from_date=${encodeURIComponent(f.from_date)}`;
+            if (f.to_date) url += `&to_date=${encodeURIComponent(f.to_date)}`;
+            if (f.status && f.status !== 'all') url += `&status=${encodeURIComponent(f.status)}`;
+            if (f.class_name && f.class_name !== 'all') url += `&class_name=${encodeURIComponent(f.class_name)}`;
+            if (f.threshold && f.threshold !== 'all') url += `&threshold=${encodeURIComponent(f.threshold)}`;
+
+            const res = await fetch(url);
             const data = await res.json();
             if (!res.ok) return;
 
@@ -1651,7 +1847,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
     function renderAdminAttendanceRecords(records) {
         const tbody = document.getElementById('adminAttendanceTableBody');
         const cards = document.getElementById('adminAttendanceMobileCards');
@@ -1676,7 +1871,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${escapeHtml(r.semester || '-')}</td>
                     <td>${escapeHtml(r.subject)}</td>
                     <td>${escapeHtml(r.date)} • ${escapeHtml(r.time)}</td>
-                    <td><span class="badge badge-secondary">${escapeHtml(r.session_id)}</span></td>
                     <td>${renderGpsBadge(r)}</td>
                     <td>
                         <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
@@ -1703,7 +1897,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div style="font-size: 0.85rem; color: var(--color-text-muted); display: grid; gap: 0.25rem;">
                         <div><strong>Class & Semester:</strong> ${escapeHtml(r.class_name)} (${escapeHtml(r.semester || '-')}) • ${escapeHtml(r.subject)}</div>
-                        <div><strong>Session ID:</strong> ${escapeHtml(r.session_id)}</div>
                         <div><strong>Date & Time:</strong> ${escapeHtml(r.date)} at ${escapeHtml(r.time)}</div>
                         <div><strong>GPS Location:</strong> ${renderGpsBadge(r)}</div>
                     </div>
@@ -1850,7 +2043,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             
                             <div class="meta-box">
                                 <div>Department: <strong>${dept}</strong> | All Classes & Semesters</div>
-                                <div style="margin-top: 4px; font-size: 13px; color: #64748B;">Faculty In-Charge: ${faculty} | Session Code: ${sess}</div>
+                                <div style="margin-top: 4px; font-size: 13px; color: #64748B;">Faculty In-Charge: ${faculty}</div>
                             </div>
 
                             <div class="qr-container">
@@ -2056,6 +2249,146 @@ document.addEventListener('DOMContentLoaded', () => {
     makeElementDraggable(qrModalDragHeader, qrModalContainer);
     makeElementDraggable(qrCardDragHandle, qrModalContainer);
 
+    // --- Share Attendance Report via Gmail / Email Controller ---
+    const shareReportModal = document.getElementById('shareReportModal');
+    const shareReportForm = document.getElementById('shareReportForm');
+    const closeShareReportModalBtn = document.getElementById('closeShareReportModalBtn');
+    const cancelShareReportBtn = document.getElementById('cancelShareReportBtn');
+    const shareRecipientEmail = document.getElementById('shareRecipientEmail');
+    const shareReportSubject = document.getElementById('shareReportSubject');
+    const shareReportNotes = document.getElementById('shareReportNotes');
+    const shareIncludeCsv = document.getElementById('shareIncludeCsv');
+    const shareIncludeHtml = document.getElementById('shareIncludeHtml');
+    const shareReportError = document.getElementById('shareReportError');
+    const submitShareEmailBtn = document.getElementById('submitShareEmailBtn');
+    const submitShareEmailText = document.getElementById('submitShareEmailText');
+    const shareContextDept = document.getElementById('shareContextDept');
+    const shareContextSem = document.getElementById('shareContextSem');
+    const shareContextDate = document.getElementById('shareContextDate');
+
+    let currentShareFilters = {};
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target ? (e.target.classList.contains('open-share-email-btn') ? e.target : e.target.closest('.open-share-email-btn')) : null;
+        if (btn) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!shareReportModal) return;
+
+            const source = btn.dataset.source || 'admin';
+            let filters = {};
+
+            if (source === 'staff') {
+                filters = getStaffActiveFilters ? getStaffActiveFilters() : {};
+            } else {
+                filters = getAdminActiveFilters ? getAdminActiveFilters() : {};
+            }
+
+            currentShareFilters = { ...filters };
+
+            // Update modal context chips
+            if (shareContextDept) {
+                const d = filters.dept || 'all';
+                shareContextDept.textContent = `Dept: ${d === 'all' ? 'All Departments' : d}`;
+            }
+            if (shareContextSem) {
+                const s = filters.semester || 'all';
+                shareContextSem.textContent = `Sem: ${s === 'all' ? 'All Semesters' : s}`;
+            }
+            if (shareContextDate) {
+                if (filters.from_date && filters.to_date) {
+                    shareContextDate.textContent = `Date: ${filters.from_date} to ${filters.to_date}`;
+                } else if (filters.date) {
+                    shareContextDate.textContent = `Date: ${filters.date}`;
+                } else {
+                    shareContextDate.textContent = `Date: All Dates`;
+                }
+            }
+
+            // Pre-fill a descriptive subject line
+            const deptText = filters.dept && filters.dept !== 'all' ? filters.dept : 'All Departments';
+            const semText = filters.semester && filters.semester !== 'all' ? ` (${filters.semester})` : '';
+            const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            if (shareReportSubject) {
+                shareReportSubject.value = `AQ Attendance Report • ${deptText}${semText} [${todayStr}]`;
+            }
+
+            if (shareReportError) shareReportError.classList.add('hidden');
+            shareReportModal.classList.remove('hidden');
+            if (shareRecipientEmail) {
+                setTimeout(() => shareRecipientEmail.focus(), 50);
+            }
+        }
+    });
+
+    if (closeShareReportModalBtn) {
+        closeShareReportModalBtn.addEventListener('click', () => shareReportModal.classList.add('hidden'));
+    }
+    if (cancelShareReportBtn) {
+        cancelShareReportBtn.addEventListener('click', () => shareReportModal.classList.add('hidden'));
+    }
+
+    if (shareReportForm) {
+        shareReportForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const recipient_email = shareRecipientEmail ? shareRecipientEmail.value.trim() : '';
+            const subject = shareReportSubject ? shareReportSubject.value.trim() : '';
+            const notes = shareReportNotes ? shareReportNotes.value.trim() : '';
+            const include_csv = shareIncludeCsv ? shareIncludeCsv.checked : true;
+            const include_html = shareIncludeHtml ? shareIncludeHtml.checked : true;
+
+            if (!recipient_email) {
+                if (shareReportError) showError(shareReportError, 'Please enter a valid recipient email address.');
+                return;
+            }
+
+            if (submitShareEmailBtn) submitShareEmailBtn.disabled = true;
+            if (submitShareEmailText) submitShareEmailText.textContent = 'Sending Email...';
+            if (shareReportError) shareReportError.classList.add('hidden');
+
+            try {
+                const payload = {
+                    recipient_email,
+                    subject,
+                    notes,
+                    include_csv,
+                    include_html,
+                    ...currentShareFilters
+                };
+
+                const res = await fetch('/api/attendance/share-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    showToast(data.message || `Attendance report shared to ${recipient_email} successfully!`, 'success');
+                    shareReportModal.classList.add('hidden');
+                    shareReportForm.reset();
+                } else {
+                    if (shareReportError) {
+                        showError(shareReportError, data.error || 'Failed to send attendance report email.');
+                    } else {
+                        showToast(data.error || 'Failed to send email.', 'error');
+                    }
+                }
+            } catch (err) {
+                console.error('Error sharing report:', err);
+                if (shareReportError) {
+                    showError(shareReportError, 'Network error while sending attendance report.');
+                } else {
+                    showToast('Network error while sending email.', 'error');
+                }
+            } finally {
+                if (submitShareEmailBtn) submitShareEmailBtn.disabled = false;
+                if (submitShareEmailText) submitShareEmailText.textContent = 'Send Report via Gmail';
+            }
+        });
+    }
+
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>"']/g, function (m) {
@@ -2069,4 +2402,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
 

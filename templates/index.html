@@ -339,11 +339,32 @@
                             <option value="Semester 8">Semester 8</option>
                         </select>
 
-                        <input type="text" id="adminAttendanceSearch" placeholder="🔍 Search student, roll no..."
+                        <input type="text" id="adminAttendanceSearch" placeholder="🔍 Search student, roll no, subject..."
                             class="search-input" style="padding: 0.45rem 0.75rem;">
 
-                        <!-- Excel / CSV Export & Google Sheets Sync Buttons -->
-                        <div style="display: flex; gap: 0.5rem;">
+                        <!-- Action Buttons & Advanced Filter Toggle -->
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button type="button" id="toggleAdminAdvFiltersBtn" class="btn btn-secondary"
+                                title="Toggle Advanced Filter Options"
+                                style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; padding: 0.5rem 0.85rem; border: 1.5px solid var(--color-border); background: #FFFFFF;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                                </svg>
+                                <span>Advanced Filters</span>
+                                <span id="adminAdvFilterBadge" class="filter-count-badge hidden">0</span>
+                            </button>
+
+                            <button type="button" class="btn btn-primary open-share-email-btn"
+                                data-source="admin"
+                                title="Share Attendance Report via Email / Gmail"
+                                style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; background: linear-gradient(135deg, #EA4335 0%, #D93025 100%); border: none; padding: 0.5rem 1rem; color: #FFFFFF; box-shadow: 0 2px 8px rgba(234, 67, 53, 0.25);">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                    <polyline points="22,6 12,13 2,6"></polyline>
+                                </svg>
+                                <span>Share via Gmail</span>
+                            </button>
+
                             <button type="button" id="exportCsvBtn" class="btn btn-primary"
                                 title="Download Excel / CSV File for Department"
                                 style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; background: #10B981; border: none; padding: 0.5rem 1rem;">
@@ -372,6 +393,69 @@
                     </div>
                 </div>
 
+                <!-- Admin Collapsible Advanced Filters Drawer -->
+                <div id="adminAdvancedFilterPanel" class="advanced-filter-panel hidden">
+                    <div class="adv-filter-header">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 0.95rem; color: var(--color-navy-dark);">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.5">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                            </svg>
+                            <span>Advanced Filter Matrix</span>
+                        </div>
+                        <button type="button" id="adminResetFiltersBtn" class="btn-reset-filters" title="Reset all filters to defaults">
+                            🔄 Reset All Filters
+                        </button>
+                    </div>
+
+                    <div class="adv-filter-grid">
+                        <div class="form-group" style="margin: 0;">
+                            <label for="adminFromDateFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 From Date</label>
+                            <input type="date" id="adminFromDateFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem;">
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="adminToDateFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 To Date</label>
+                            <input type="date" id="adminToDateFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem;">
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="adminStatusFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🏷️ Attendance Status</label>
+                            <select id="adminStatusFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                                <option value="all">All Statuses</option>
+                                <option value="Present" style="color: #10B981; font-weight: 700;">🟢 Present (P)</option>
+                                <option value="Absent" style="color: #EF4444; font-weight: 700;">🔴 Absent (A)</option>
+                                <option value="Leave" style="color: #F59E0B; font-weight: 700;">🟡 Leave (L)</option>
+                                <option value="Holiday" style="color: #8B5CF6; font-weight: 700;">🟣 Holiday (H)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="adminClassFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🎓 Class / Degree</label>
+                            <select id="adminClassFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                                <option value="all">All Classes / Degrees</option>
+                                <option value="B.Tech CS">B.Tech CS</option>
+                                <option value="B.Tech IT">B.Tech IT</option>
+                                <option value="BCA">BCA</option>
+                                <option value="B.Tech Mechanical">B.Tech Mechanical</option>
+                                <option value="B.Tech Electrical">B.Tech Electrical</option>
+                                <option value="B.Tech Civil">B.Tech Civil</option>
+                                <option value="B.Com">B.Com</option>
+                                <option value="M.Tech CS">M.Tech CS</option>
+                                <option value="MCA">MCA</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="adminThresholdFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📊 Attendance % Threshold</label>
+                            <select id="adminThresholdFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                                <option value="all">All Attendance Rates</option>
+                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage (&lt; 45%)</option>
+                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Warning Zone (45% - 74%)</option>
+                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Good Standing (&ge; 75%)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="table-responsive desktop-only">
                     <table class="data-table">
@@ -384,7 +468,6 @@
                                 <th>Semester</th>
                                 <th>Subject</th>
                                 <th>Date & Time</th>
-                                <th>Session ID</th>
                                 <th>GPS Location</th>
                                 <th>Status</th>
                             </tr>
@@ -462,7 +545,9 @@
                         <div>
                             <h3 style="font-size: 1.25rem; font-weight: 800; color: var(--color-navy-dark); margin: 0;">
                                 Official Campus Attendance QR Code</h3>
-                            <p style="font-size: 0.85rem; color: var(--color-text-muted); margin: 0.2rem 0 0 0;">Permanent lifetime QR code. Students can scan once per day inside campus across any date.</p>
+                            <p style="font-size: 0.85rem; color: var(--color-text-muted); margin: 0.2rem 0 0 0;">
+                                Permanent lifetime QR code. Students can scan once per day inside campus across any
+                                date.</p>
                         </div>
                     </div>
                 </div>
@@ -474,7 +559,8 @@
                     <span class="clock-divider">•</span>
                     <strong id="qrLiveTimeDisplay">00:00:00 AM</strong>
                     <span class="clock-divider">•</span>
-                    <span style="font-size: 0.85rem; color: #10B981; font-weight: 700;">🔒 Geofence Active (Campus Radius: 800m)</span>
+                    <span style="font-size: 0.85rem; color: #10B981; font-weight: 700;">🔒 Geofence Active (Campus
+                        Radius: 800m)</span>
                 </div>
 
                 <!-- Centered QR Inner Display (QR Code Centered in Middle) -->
@@ -484,7 +570,8 @@
                     </div>
 
                     <div class="qr-info-panel qr-info-centered">
-                        <div class="security-pill" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);">
+                        <div class="security-pill"
+                            style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2.5">
                                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -498,25 +585,26 @@
                         <p id="qrDisplayMeta"
                             style="font-size: 0.95rem; color: #94A3B8; margin-top: 0.25rem; text-align: center;">
                             Class & Department</p>
-                        <div class="qr-session-id"
-                            style="margin-top: 0.6rem; background: rgba(255, 255, 255, 0.12); color: #FFFFFF; border: 1px solid rgba(255, 255, 255, 0.2); padding: 0.45rem 0.85rem; border-radius: var(--radius-sm); font-size: 0.88rem; display: inline-block;">
-                            Session Code: <strong id="qrSessionCode" style="color: #60A5FA;">PERM-CS-OFFICIAL</strong>
-                        </div>
 
                         <!-- Action Buttons for Permanent QR: Print Classroom Poster & Download PNG -->
-                        <div style="margin-top: 1rem; display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap;">
+                        <div
+                            style="margin-top: 1rem; display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap;">
                             <button type="button" id="printQrPosterBtn" class="btn btn-sm"
                                 style="background: #2563EB; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
                                     <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                    <path
+                                        d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2">
+                                    </path>
                                     <rect x="6" y="14" width="12" height="8"></rect>
                                 </svg>
                                 <span>Print / Save Poster</span>
                             </button>
                             <button type="button" id="downloadQrPngBtn" class="btn btn-sm"
                                 style="background: #10B981; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
                                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                     <polyline points="7 10 12 15 17 10"></polyline>
                                     <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -527,13 +615,34 @@
                     </div>
                 </div>
             </div>
-            </div>
 
+            <!-- Staff Department Student Roster with Semester Filter -->
             <div class="table-card">
-                <div class="table-card-header">
+                <div class="table-card-header" style="flex-wrap: wrap; gap: 1rem;">
                     <div>
                         <h3>Department Student List</h3>
                         <p class="subtitle">Students registered under your department</p>
+                    </div>
+
+                    <div class="table-actions" style="flex-wrap: wrap; gap: 0.75rem;">
+                        <select id="staffStudentSemesterFilter" class="search-input"
+                            style="padding: 0.45rem 0.75rem; font-weight: 600;"
+                            title="Filter department students by semester">
+                            <option value="all">All Semesters</option>
+                            <option value="Semester 1">Semester 1</option>
+                            <option value="Semester 2">Semester 2</option>
+                            <option value="Semester 3">Semester 3</option>
+                            <option value="Semester 4">Semester 4</option>
+                            <option value="Semester 5">Semester 5</option>
+                            <option value="Semester 6">Semester 6</option>
+                            <option value="Semester 7">Semester 7</option>
+                            <option value="Semester 8">Semester 8</option>
+                        </select>
+
+                        <input type="text" id="staffStudentSearchInput" placeholder="🔍 Search name, roll no..."
+                            class="search-input" style="padding: 0.45rem 0.75rem;">
+
+                        <span id="staffStudentCountBadge" class="badge badge-staff" style="font-weight: 700;">0 Students</span>
                     </div>
                 </div>
 
@@ -566,8 +675,8 @@
                         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
                     </svg>
-                    <h4>No Students in Your Department Yet</h4>
-                    <p>Once the Administrator registers students for your department, they will appear here.</p>
+                    <h4>No Students Found</h4>
+                    <p>No students match the selected semester or search filters for your department.</p>
                 </div>
             </div>
 
@@ -585,7 +694,6 @@
                             <option value="all">All Departments</option>
                             <option value="Computer Science">Computer Science</option>
                             <option value="Information Technology">Information Technology</option>
-
                             <option value="Commerce">Commerce</option>
                             <option value="Mechanical Engineering">Mechanical Engineering</option>
                             <option value="Electrical Engineering">Electrical Engineering</option>
@@ -608,10 +716,31 @@
                         </select>
 
                         <input type="text" id="staffAttendanceSubjectFilter"
-                            placeholder="🔍 Search student or subject..." class="search-input"
+                            placeholder="🔍 Search student, roll no, subject..." class="search-input"
                             style="padding: 0.45rem 0.75rem;">
 
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button type="button" id="toggleStaffAdvFiltersBtn" class="btn btn-secondary"
+                                title="Toggle Advanced Filter Options"
+                                style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; padding: 0.5rem 0.85rem; border: 1.5px solid var(--color-border); background: #FFFFFF;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                                </svg>
+                                <span>Advanced Filters</span>
+                                <span id="staffAdvFilterBadge" class="filter-count-badge hidden">0</span>
+                            </button>
+
+                            <button type="button" class="btn btn-primary open-share-email-btn"
+                                data-source="staff"
+                                title="Share Attendance Report via Email / Gmail"
+                                style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; background: linear-gradient(135deg, #EA4335 0%, #D93025 100%); border: none; padding: 0.5rem 1rem; color: #FFFFFF; box-shadow: 0 2px 8px rgba(234, 67, 53, 0.25);">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                    <polyline points="22,6 12,13 2,6"></polyline>
+                                </svg>
+                                <span>Share via Gmail</span>
+                            </button>
+
                             <button type="button" class="btn btn-primary open-manual-att-modal-btn"
                                 title="Mark Student Attendance Manually"
                                 style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; background: #2563EB; border: none; padding: 0.5rem 1rem;">
@@ -652,6 +781,69 @@
 
                 </div>
 
+                <!-- Staff Collapsible Advanced Filters Drawer -->
+                <div id="staffAdvancedFilterPanel" class="advanced-filter-panel hidden">
+                    <div class="adv-filter-header">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 0.95rem; color: var(--color-navy-dark);">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.5">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                            </svg>
+                            <span>Advanced Filter Matrix</span>
+                        </div>
+                        <button type="button" id="staffResetFiltersBtn" class="btn-reset-filters" title="Reset all filters to defaults">
+                            🔄 Reset All Filters
+                        </button>
+                    </div>
+
+                    <div class="adv-filter-grid">
+                        <div class="form-group" style="margin: 0;">
+                            <label for="staffFromDateFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 From Date</label>
+                            <input type="date" id="staffFromDateFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem;">
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="staffToDateFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 To Date</label>
+                            <input type="date" id="staffToDateFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem;">
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="staffStatusFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🏷️ Attendance Status</label>
+                            <select id="staffStatusFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                                <option value="all">All Statuses</option>
+                                <option value="Present" style="color: #10B981; font-weight: 700;">🟢 Present (P)</option>
+                                <option value="Absent" style="color: #EF4444; font-weight: 700;">🔴 Absent (A)</option>
+                                <option value="Leave" style="color: #F59E0B; font-weight: 700;">🟡 Leave (L)</option>
+                                <option value="Holiday" style="color: #8B5CF6; font-weight: 700;">🟣 Holiday (H)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="staffClassFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🎓 Class / Degree</label>
+                            <select id="staffClassFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                                <option value="all">All Classes / Degrees</option>
+                                <option value="B.Tech CS">B.Tech CS</option>
+                                <option value="B.Tech IT">B.Tech IT</option>
+                                <option value="BCA">BCA</option>
+                                <option value="B.Tech Mechanical">B.Tech Mechanical</option>
+                                <option value="B.Tech Electrical">B.Tech Electrical</option>
+                                <option value="B.Tech Civil">B.Tech Civil</option>
+                                <option value="B.Com">B.Com</option>
+                                <option value="M.Tech CS">M.Tech CS</option>
+                                <option value="MCA">MCA</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin: 0;">
+                            <label for="staffThresholdFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📊 Attendance % Threshold</label>
+                            <select id="staffThresholdFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                                <option value="all">All Attendance Rates</option>
+                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage (&lt; 45%)</option>
+                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Warning Zone (45% - 74%)</option>
+                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Good Standing (&ge; 75%)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="table-responsive desktop-only">
                     <table class="data-table">
@@ -662,7 +854,6 @@
                                 <th>Class</th>
                                 <th>Semester</th>
                                 <th>Subject</th>
-                                <th>Session ID</th>
                                 <th>Date & Time</th>
                                 <th>GPS Location</th>
                                 <th>Status</th>
@@ -674,6 +865,7 @@
                         </tbody>
                     </table>
                 </div>
+
 
                 <div id="staffAttendanceMobileCards" class="mobile-only-cards">
                     <!-- Dynamic Mobile Cards -->
@@ -984,7 +1176,6 @@
                                 <th>Subject / Course</th>
                                 <th>Date</th>
                                 <th>Time</th>
-                                <th>Session Code</th>
                                 <th>Department</th>
                                 <th>GPS Location</th>
                                 <th>Status</th>
@@ -1352,7 +1543,91 @@
         </div>
     </div>
 
+
+    <!-- Share Attendance Report Modal (Admin & Staff -> Email / Gmail) -->
+    <div id="shareReportModal" class="modal-overlay hidden">
+        <div class="modal-container modal-lg">
+            <div class="modal-header" style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color: #FFFFFF; border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 1.25rem 1.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(234, 67, 53, 0.2); display: flex; align-items: center; justify-content: center; color: #EA4335;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF; margin: 0;">Share Report via Gmail / Email</h3>
+                        <p style="font-size: 0.85rem; color: #94A3B8; margin: 0.2rem 0 0 0;">Deliver formatted attendance stats and CSV spreadsheet directly to any recipient</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-icon close-modal-btn" id="closeShareReportModalBtn" style="color: #FFFFFF;">&times;</button>
+            </div>
+
+            <form id="shareReportForm">
+                <div class="modal-body" style="padding: 1.5rem;">
+                    <!-- Filter Context Summary Banner -->
+                    <div id="shareReportFilterContext" style="margin-bottom: 1.25rem; padding: 0.85rem 1rem; background: #F8FAFC; border: 1.5px solid var(--color-border); border-radius: var(--radius-md); font-size: 0.88rem;">
+                        <div style="font-weight: 800; color: var(--color-navy-dark); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem;">
+                            <span>📋 Report Context (Currently Applied Filters):</span>
+                        </div>
+                        <div id="shareReportFilterBadges" style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                            <span class="badge badge-staff" id="shareContextDept">Dept: All</span>
+                            <span class="badge badge-info" id="shareContextSem">Sem: All</span>
+                            <span class="badge badge-secondary" id="shareContextDate">Date: All</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="shareRecipientEmail" style="font-weight: 800; color: var(--color-navy-dark);">Recipient Email Address *</label>
+                        <div class="input-with-icon">
+                            <svg class="input-lead-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                <polyline points="22,6 12,13 2,6"></polyline>
+                            </svg>
+                            <input type="email" id="shareRecipientEmail" placeholder="e.g. principal@college.edu or name@gmail.com" required autocomplete="email">
+                        </div>
+                        <small style="color: var(--color-text-muted); font-size: 0.78rem; margin-top: 0.25rem; display: block;">Supports any standard Gmail, Google Workspace, or institutional email address.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="shareReportSubject" style="font-weight: 800; color: var(--color-navy-dark);">Email Subject Line</label>
+                        <input type="text" id="shareReportSubject" placeholder="e.g. AQ Attendance Report • Computer Science (Semester 4)" class="search-input" style="width: 100%;">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="shareReportNotes" style="font-weight: 800; color: var(--color-navy-dark);">Remarks / Additional Notes (Optional)</label>
+                        <textarea id="shareReportNotes" rows="3" placeholder="Add custom notes or instructions for the recipient (e.g. Please find the monthly attendance deficiency report for review)..." style="width: 100%; padding: 0.75rem; border-radius: var(--radius-sm); border: 1.5px solid var(--color-border); font-family: inherit; font-size: 0.9rem; resize: vertical;"></textarea>
+                    </div>
+
+                    <div style="margin-top: 1rem; padding: 0.85rem 1rem; background: #F1F5F9; border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 0.6rem;">
+                        <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.88rem; font-weight: 700; color: var(--color-navy-dark);">
+                            <input type="checkbox" id="shareIncludeCsv" checked style="width: 16px; height: 16px; accent-color: #2563EB;">
+                            <span>Attach Full CSV Spreadsheet (.csv file for Microsoft Excel / Google Sheets)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; font-size: 0.88rem; font-weight: 700; color: var(--color-navy-dark);">
+                            <input type="checkbox" id="shareIncludeHtml" checked style="width: 16px; height: 16px; accent-color: #2563EB;">
+                            <span>Include High-Definition Visual Summary & Attendance Table in Email Body</span>
+                        </label>
+                    </div>
+
+                    <div id="shareReportError" class="alert alert-error hidden" style="margin-top: 1rem;"></div>
+                </div>
+
+                <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                    <button type="button" class="btn btn-secondary" id="cancelShareReportBtn">Cancel</button>
+                    <button type="submit" id="submitShareEmailBtn" class="btn btn-primary" style="background: linear-gradient(135deg, #EA4335 0%, #D93025 100%); border: none; font-weight: 800; display: inline-flex; align-items: center; gap: 0.5rem;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                        <span id="submitShareEmailText">Send Report via Gmail</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 
-</html>
+</html>

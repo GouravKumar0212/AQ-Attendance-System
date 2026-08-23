@@ -1622,6 +1622,62 @@ textarea:hover,
     margin-top: auto;
 }
 
+/* ==========================================================================
+   Advanced Filters Drawer & Matrix
+   ========================================================================== */
+.advanced-filter-panel {
+    background: #F8FAFC;
+    border: 1.5px solid var(--color-border, #E2E8F0);
+    border-radius: var(--radius-md, 10px);
+    padding: 1.15rem 1.25rem;
+    margin: 1rem 0 1.25rem 0;
+    animation: fadeInDown 0.25s ease-out;
+}
 
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
+.adv-filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px dashed var(--color-border, #E2E8F0);
+}
 
+.btn-reset-filters {
+    background: #FFFFFF;
+    border: 1px solid var(--color-border, #E2E8F0);
+    border-radius: var(--radius-sm, 6px);
+    padding: 0.3rem 0.65rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-text-secondary, #475569);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.btn-reset-filters:hover {
+    background: #F1F5F9;
+    color: var(--color-navy-dark, #0F172A);
+    border-color: #CBD5E1;
+}
+
+.adv-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.85rem;
+}
+
+.filter-count-badge {
+    background: #2563EB;
+    color: #FFFFFF;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    margin-left: 0.2rem;
+}

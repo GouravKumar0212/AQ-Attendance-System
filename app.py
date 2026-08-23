@@ -687,21 +687,26 @@ def delete_user(user_id):
 @app.route('/api/staff/students', methods=['GET'])
 def get_staff_students():
     """
-    Task: Fetch list of student accounts filtered by department and semester for faculty/admin view.
+    Task: Fetch list of student accounts filtered by department, semester, and search query for faculty/admin view.
     """
     if session.get('role') not in ['staff', 'admin']:
         return jsonify({'error': 'Unauthorized access.'}), 403
         
     conn = get_db_connection()
     user_id = session.get('user_id')
+    user_role = session.get('role')
     staff = conn.execute('SELECT department FROM users WHERE id = ?', (user_id,)).fetchone()
     staff_dept = staff['department'] if staff else ''
 
     selected_dept = request.args.get('department', '').strip()
     semester = request.args.get('semester', '').strip()
+    search = request.args.get('search', '').strip()
 
     if not selected_dept:
-        selected_dept = staff_dept
+        if user_role == 'admin':
+            selected_dept = 'all'
+        else:
+            selected_dept = staff_dept or 'all'
 
     query = "SELECT id, username, full_name, role, department, email, class_name, semester, roll_no, created_at FROM users WHERE role = 'student'"
     params = []
@@ -712,17 +717,22 @@ def get_staff_students():
     if semester and semester.lower() != 'all':
         query += " AND (semester = ? OR class_name LIKE ?)"
         params.extend([semester, f"%{semester}%"])
+    if search:
+        query += " AND (full_name LIKE ? OR username LIKE ? OR roll_no LIKE ? OR email LIKE ? OR class_name LIKE ?)"
+        params.extend([f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"])
 
     query += " ORDER BY full_name ASC"
     students = conn.execute(query, params).fetchall()
-
-    # Fallback: If department/semester filter produced 0 students, return all registered students
-    if not students:
-        fallback_query = "SELECT id, username, full_name, role, department, email, class_name, semester, roll_no, created_at FROM users WHERE role = 'student' ORDER BY full_name ASC"
-        students = conn.execute(fallback_query).fetchall()
-
     conn.close()
-    return jsonify({'students': [dict(s) for s in students], 'department': selected_dept})
+
+    return jsonify({
+        'success': True,
+        'students': [dict(s) for s in students],
+        'department': selected_dept,
+        'semester': semester or 'all',
+        'total': len(students)
+    })
+
 
 
 # --- ATTENDANCE MANAGEMENT & DYNAMIC TOTP APIS ---
@@ -1049,102 +1059,145 @@ def update_attendance_status():
     return jsonify({'success': True, 'message': f"Student attendance status updated to '{final_status}'!"})
 
 
+def build_attendance_sql_filters(args, user_dept=None, is_admin=False):
+    """
+    Task: Build SQL WHERE clause and parameter list from request filter arguments for attendance endpoints.
+    """
+    query = 'SELECT * FROM attendance WHERE 1=1'
+    params = []
+
+    department = args.get('department', '').strip()
+    if not department and not is_admin and user_dept:
+        department = user_dept
+
+    if department and department.lower() != 'all':
+        query += ' AND (department = ? OR department LIKE ?)'
+        params.extend([department, f"%{department}%"])
+
+    semester = args.get('semester', '').strip()
+    if semester and semester.lower() != 'all':
+        query += ' AND (semester = ? OR class_name LIKE ?)'
+        params.extend([semester, f"%{semester}%"])
+
+    class_name = args.get('class_name', '').strip()
+    if class_name and class_name.lower() != 'all':
+        query += ' AND class_name = ?'
+        params.append(class_name)
+
+    status = args.get('status', '').strip()
+    if status and status.lower() != 'all':
+        query += ' AND status LIKE ?'
+        params.append(f"%{status}%")
+
+    # Date filtering: specific date, date range (from_date / to_date), or month
+    date = args.get('date', '').strip()
+    from_date = args.get('from_date', '').strip()
+    to_date = args.get('to_date', '').strip()
+    month = args.get('month', '').strip()
+
+    if from_date and to_date:
+        query += ' AND date >= ? AND date <= ?'
+        params.extend([from_date, to_date])
+    elif from_date:
+        query += ' AND date >= ?'
+        params.append(from_date)
+    elif to_date:
+        query += ' AND date <= ?'
+        params.append(to_date)
+    elif date:
+        query += ' AND date = ?'
+        params.append(date)
+    elif month:
+        query += ' AND date LIKE ?'
+        params.append(f"{month}%")
+
+    subject = args.get('subject', '').strip()
+    if subject:
+        query += ' AND (subject LIKE ? OR student_name LIKE ? OR roll_no LIKE ?)'
+        params.extend([f"%{subject}%", f"%{subject}%", f"%{subject}%"])
+
+    search = args.get('search', '').strip()
+    if search:
+        query += ' AND (student_name LIKE ? OR roll_no LIKE ? OR session_id LIKE ? OR subject LIKE ? OR class_name LIKE ? OR semester LIKE ?)'
+        params.extend([f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"])
+
+    return query, params
+
+
 @app.route('/api/staff/attendance', methods=['GET'])
 def get_staff_attendance():
     """
-    Task: Query student attendance records for staff view filtered by department, subject, date, month, and semester.
+    Task: Query student attendance records for staff view with normal and advanced filtering.
     """
     if session.get('role') not in ['staff', 'admin']:
         return jsonify({'error': 'Unauthorized access.'}), 403
 
     user_id = session.get('user_id')
+    is_admin = (session.get('role') == 'admin')
     conn = get_db_connection()
     staff = conn.execute('SELECT department FROM users WHERE id = ?', (user_id,)).fetchone()
-    dept = staff['department'] if staff else ''
+    staff_dept = staff['department'] if staff else ''
 
-    selected_dept = request.args.get('department', '').strip()
-    if not selected_dept:
-        selected_dept = dept
-
-    subject = request.args.get('subject', '').strip()
-    date_filter = request.args.get('date', '').strip()
-    month = request.args.get('month', '').strip()
-    semester = request.args.get('semester', '').strip()
-
-    query = 'SELECT * FROM attendance WHERE 1=1'
-    params = []
-
-    if selected_dept and selected_dept.lower() != 'all':
-        query += ' AND (department = ? OR department LIKE ?)'
-        params.extend([selected_dept, f"%{selected_dept}%"])
-    if subject:
-        query += ' AND (subject LIKE ? OR student_name LIKE ? OR roll_no LIKE ?)'
-        params.extend([f"%{subject}%", f"%{subject}%", f"%{subject}%"])
-    if date_filter:
-        query += ' AND date = ?'
-        params.append(date_filter)
-    elif month:
-        query += ' AND date LIKE ?'
-        params.append(f"{month}%")
-    if semester and semester.lower() != 'all':
-        query += ' AND (semester = ? OR class_name LIKE ?)'
-        params.extend([semester, f"%{semester}%"])
-
+    query, params = build_attendance_sql_filters(request.args, user_dept=staff_dept, is_admin=is_admin)
     query += ' ORDER BY date DESC, id DESC'
-    records = conn.execute(query, params).fetchall()
+    records = [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    threshold = request.args.get('threshold', '').strip().lower()
+    if threshold and threshold != 'all':
+        # Filter records based on student attendance rate threshold
+        # First group by student
+        student_counts = {}
+        for r in records:
+            sid = r.get('student_id') or r.get('roll_no')
+            if sid not in student_counts:
+                student_counts[sid] = {'present': 0, 'total': 0}
+            st = (r.get('status') or '').lower()
+            if st.startswith('pres') or st == 'p':
+                student_counts[sid]['present'] += 1
+                student_counts[sid]['total'] += 1
+            elif st.startswith('abs') or st == 'a':
+                student_counts[sid]['total'] += 1
+
+        filtered_records = []
+        for r in records:
+            sid = r.get('student_id') or r.get('roll_no')
+            st_info = student_counts.get(sid, {'present': 0, 'total': 0})
+            pct = (st_info['present'] / st_info['total'] * 100) if st_info['total'] > 0 else 100.0
+            if threshold == 'critical' and pct < 45.0:
+                filtered_records.append(r)
+            elif threshold == 'warning' and 45.0 <= pct < 75.0:
+                filtered_records.append(r)
+            elif threshold == 'good' and pct >= 75.0:
+                filtered_records.append(r)
+        records = filtered_records
+
     conn.close()
 
+    selected_dept = request.args.get('department', '').strip() or staff_dept or 'all'
     return jsonify({
-        'attendance': [dict(r) for r in records],
-        'department': selected_dept
+        'attendance': records,
+        'department': selected_dept,
+        'total': len(records)
     })
 
 
 @app.route('/api/admin/attendance', methods=['GET'])
 def get_admin_attendance():
     """
-    Task: Query global attendance records for admin view and compute student low attendance (<45%) threshold warnings.
+    Task: Query global attendance records for admin view with normal & advanced filtering and student deficiency calculation.
     """
     if session.get('role') != 'admin':
         return jsonify({'error': 'Unauthorized access. Admin access required.'}), 403
 
-    department = request.args.get('department', '').strip()
-    subject = request.args.get('subject', '').strip()
-    date = request.args.get('date', '').strip()
-    month = request.args.get('month', '').strip()
-    semester = request.args.get('semester', '').strip()
-    search = request.args.get('search', '').strip()
-
-    query = 'SELECT * FROM attendance WHERE 1=1'
-    params = []
-
-    if department and department.lower() != 'all':
-        query += ' AND department = ?'
-        params.append(department)
-    if subject:
-        query += ' AND subject LIKE ?'
-        params.append(f"%{subject}%")
-    if date:
-        query += ' AND date = ?'
-        params.append(date)
-    elif month:
-        query += ' AND date LIKE ?'
-        params.append(f"{month}%")
-    if semester and semester.lower() != 'all':
-        query += ' AND (semester = ? OR class_name LIKE ?)'
-        params.extend([semester, f"%{semester}%"])
-    if search:
-        query += ' AND (student_name LIKE ? OR roll_no LIKE ? OR session_id LIKE ? OR subject LIKE ? OR class_name LIKE ? OR semester LIKE ?)'
-        params.extend([f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"])
-
-    query += ' ORDER BY date DESC, id DESC'
     conn = get_db_connection()
+    query, params = build_attendance_sql_filters(request.args, is_admin=True)
+    query += ' ORDER BY date DESC, id DESC'
     records = [dict(r) for r in conn.execute(query, params).fetchall()]
 
     # Calculate student-wise summary for low attendance (< 45%) alerts
     student_stats = {}
     for r in records:
-        sid = r.get('student_id')
+        sid = r.get('student_id') or r.get('roll_no')
         if not sid:
             continue
         if sid not in student_stats:
@@ -1156,13 +1209,19 @@ def get_admin_attendance():
                 'class_name': r.get('class_name', ''),
                 'semester': r.get('semester', ''),
                 'present_count': 0,
-                'absent_count': 0
+                'absent_count': 0,
+                'leave_count': 0,
+                'holiday_count': 0
             }
         st = (r.get('status') or '').lower()
         if st.startswith('pres') or st == 'p':
             student_stats[sid]['present_count'] += 1
         elif st.startswith('abs') or st == 'a':
             student_stats[sid]['absent_count'] += 1
+        elif st.startswith('leave') or st == 'l':
+            student_stats[sid]['leave_count'] += 1
+        elif st.startswith('hol') or st == 'h':
+            student_stats[sid]['holiday_count'] += 1
 
     low_attendance_students = []
     for sid, stat in student_stats.items():
@@ -1173,46 +1232,47 @@ def get_admin_attendance():
         if pct < 45.0:
             low_attendance_students.append(stat)
 
+    threshold = request.args.get('threshold', '').strip().lower()
+    if threshold and threshold != 'all':
+        filtered_records = []
+        for r in records:
+            sid = r.get('student_id') or r.get('roll_no')
+            stat = student_stats.get(sid)
+            pct = stat['attendance_pct'] if stat else 100.0
+            if threshold == 'critical' and pct < 45.0:
+                filtered_records.append(r)
+            elif threshold == 'warning' and 45.0 <= pct < 75.0:
+                filtered_records.append(r)
+            elif threshold == 'good' and pct >= 75.0:
+                filtered_records.append(r)
+        records = filtered_records
+
     conn.close()
 
     return jsonify({
         'attendance': records,
-        'low_attendance_students': low_attendance_students
+        'low_attendance_students': low_attendance_students,
+        'total': len(records)
     })
 
 
 @app.route('/api/admin/export-attendance', methods=['GET'])
 def export_attendance_csv():
     """
-    Task: Export filtered attendance records into downloadable CSV format for Excel/Google Sheets compatibility.
+    Task: Export filtered attendance records into downloadable CSV format with advanced filter support.
     """
     if session.get('role') not in ['admin', 'staff']:
         return jsonify({'error': 'Unauthorized access.'}), 403
 
-    department = request.args.get('department', '').strip()
-    date = request.args.get('date', '').strip()
-    month = request.args.get('month', '').strip()
-    semester = request.args.get('semester', '').strip()
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+    conn = get_db_connection()
+    staff = conn.execute('SELECT department FROM users WHERE id = ?', (user_id,)).fetchone()
+    staff_dept = staff['department'] if staff else ''
 
-    query = 'SELECT student_name, roll_no, department, class_name, semester, subject, date, time, session_id, status, latitude, longitude, distance_meters FROM attendance WHERE 1=1'
-    params = []
-
-    if department and department.lower() != 'all':
-        query += ' AND department = ?'
-        params.append(department)
-    if date:
-        query += ' AND date = ?'
-        params.append(date)
-    elif month:
-        query += ' AND date LIKE ?'
-        params.append(f"{month}%")
-    if semester and semester.lower() != 'all':
-        query += ' AND (semester = ? OR class_name LIKE ?)'
-        params.extend([semester, f"%{semester}%"])
-
+    query, params = build_attendance_sql_filters(request.args, user_dept=staff_dept, is_admin=(user_role == 'admin'))
     query += ' ORDER BY department ASC, date DESC, student_name ASC'
 
-    conn = get_db_connection()
     records = conn.execute(query, params).fetchall()
     conn.close()
 
@@ -1224,7 +1284,7 @@ def export_attendance_csv():
     writer = csv.writer(output)
 
     # Write CSV Header (Excel / Google Sheets standard)
-    writer.writerow(['Student Name', 'Roll No', 'Department', 'Class', 'Semester', 'Subject', 'Date', 'Time', 'Session ID', 'Status', 'Latitude', 'Longitude', 'Distance (m)'])
+    writer.writerow(['Student Name', 'Roll No', 'Department', 'Class', 'Semester', 'Subject', 'Date', 'Time', 'Status', 'Latitude', 'Longitude', 'Distance (m)'])
 
     for row in records:
         writer.writerow([
@@ -1236,23 +1296,286 @@ def export_attendance_csv():
             row['subject'],
             row['date'],
             row['time'],
-            row['session_id'],
             row['status'],
             row['latitude'] if ('latitude' in row.keys() and row['latitude'] is not None) else '',
             row['longitude'] if ('longitude' in row.keys() and row['longitude'] is not None) else '',
             row['distance_meters'] if ('distance_meters' in row.keys() and row['distance_meters'] is not None) else ''
         ])
 
-
     csv_data = output.getvalue()
-    dept_label = department if (department and department.lower() != 'all') else 'All_Departments'
-    filename = f"Attendance_Report_{dept_label}_{month or 'All'}.csv"
+    dept = request.args.get('department', '').strip() or 'All_Departments'
+    date_str = request.args.get('date', '').strip() or request.args.get('from_date', '').strip() or 'Report'
+    filename = f"Attendance_Report_{dept.replace(' ', '_')}_{date_str}.csv"
 
     return Response(
         csv_data,
         mimetype="text/csv",
         headers={"Content-disposition": f"attachment; filename={filename}"}
     )
+
+
+@app.route('/api/attendance/share-email', methods=['POST'])
+def share_attendance_email():
+    """
+    Task: Share attendance report with attached CSV and styled HTML summary table to any recipient's Gmail/Email address.
+    """
+    if session.get('role') not in ['admin', 'staff']:
+        return jsonify({'error': 'Unauthorized access. Staff or Admin rights required.'}), 403
+
+    data = request.get_json() or {}
+    recipient_email = data.get('recipient_email', '').strip()
+    if not recipient_email:
+        return jsonify({'error': 'Recipient email address is required.'}), 400
+
+    custom_subject = data.get('subject', '').strip()
+    notes = data.get('notes', '').strip()
+    include_csv = data.get('include_csv', True)
+
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+    user_name = session.get('full_name', 'Faculty/Admin')
+    conn = get_db_connection()
+    staff = conn.execute('SELECT department, email FROM users WHERE id = ?', (user_id,)).fetchone()
+    staff_dept = staff['department'] if staff else ''
+    sender_user_email = staff['email'] if staff else ''
+
+    query, params = build_attendance_sql_filters(data, user_dept=staff_dept, is_admin=(user_role == 'admin'))
+    query += ' ORDER BY department ASC, date DESC, student_name ASC'
+
+    records = [dict(r) for r in conn.execute(query, params).fetchall()]
+    conn.close()
+
+    # Calculate summary metrics
+    total_records = len(records)
+    present_count = sum(1 for r in records if (r.get('status') or '').lower().startswith('pres') or (r.get('status') or '').lower() == 'p')
+    absent_count = sum(1 for r in records if (r.get('status') or '').lower().startswith('abs') or (r.get('status') or '').lower() == 'a')
+    leave_count = sum(1 for r in records if (r.get('status') or '').lower().startswith('leave') or (r.get('status') or '').lower() == 'l')
+    holiday_count = sum(1 for r in records if (r.get('status') or '').lower().startswith('hol') or (r.get('status') or '').lower() == 'h')
+    working_total = present_count + absent_count
+    attendance_rate = round((present_count / working_total * 100), 1) if working_total > 0 else (100.0 if total_records > 0 else 0.0)
+
+    dept_label = data.get('department', '').strip() or staff_dept or 'All Departments'
+    sem_label = data.get('semester', '').strip() or 'All Semesters'
+    date_label = data.get('date', '').strip() or (f"{data.get('from_date', '')} to {data.get('to_date', '')}" if data.get('from_date') else 'All Dates')
+
+    email_subject = custom_subject or f"AQ Attendance Report • {dept_label} ({sem_label})"
+
+    # Generate CSV string
+    import io
+    import csv
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow(['Student Name', 'Roll No', 'Department', 'Class', 'Semester', 'Subject', 'Date', 'Time', 'Status', 'GPS Location', 'Distance (m)'])
+    for r in records:
+        lat_lng = f"{r.get('latitude')}, {r.get('longitude')}" if r.get('latitude') is not None else '-'
+        dist = f"{round(r.get('distance_meters'))}m" if r.get('distance_meters') is not None else '-'
+        writer.writerow([
+            r.get('student_name', ''),
+            r.get('roll_no', ''),
+            r.get('department', ''),
+            r.get('class_name', ''),
+            r.get('semester', ''),
+            r.get('subject', ''),
+            r.get('date', ''),
+            r.get('time', ''),
+            r.get('status', 'Present'),
+            lat_lng,
+            dist
+        ])
+    csv_content = csv_buffer.getvalue()
+
+    # Generate Styled HTML Email Content
+    table_rows_html = ""
+    preview_limit = 35
+    for idx, r in enumerate(records[:preview_limit]):
+        st = (r.get('status') or 'Present').capitalize()
+        badge_bg = '#ECFDF5' if 'Pres' in st else ('#FEF2F2' if 'Abs' in st else ('#FEF3C7' if 'Leave' in st else '#F5F3FF'))
+        badge_color = '#065F46' if 'Pres' in st else ('#991B1B' if 'Abs' in st else ('#92400E' if 'Leave' in st else '#5B21B6'))
+        
+        table_rows_html += f"""
+        <tr style="border-bottom: 1px solid #E2E8F0; background: {'#F8FAFC' if idx % 2 == 1 else '#FFFFFF'};">
+            <td style="padding: 10px 12px; font-weight: 700; color: #0F172A;">{r.get('student_name', '-')}</td>
+            <td style="padding: 10px 12px; font-family: monospace; color: #334155;">{r.get('roll_no', '-')}</td>
+            <td style="padding: 10px 12px; color: #334155;">{r.get('class_name', '-')} ({r.get('semester', '-')})</td>
+            <td style="padding: 10px 12px; color: #334155;">{r.get('subject', '-')}</td>
+            <td style="padding: 10px 12px; color: #64748B;">{r.get('date', '')} {r.get('time', '')}</td>
+            <td style="padding: 10px 12px; text-align: center;">
+                <span style="display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; background: {badge_bg}; color: {badge_color};">{st}</span>
+            </td>
+        </tr>
+        """
+
+    more_records_note = f"<p style='margin-top: 10px; font-size: 13px; color: #64748B;'><em>Note: Showing first {preview_limit} records of {total_records} in this email body. Please see the attached CSV file for full records.</em></p>" if total_records > preview_limit else ""
+
+    notes_section = f"""
+    <div style="margin: 20px 0; padding: 14px 18px; background: #EFF6FF; border-left: 4px solid #2563EB; border-radius: 6px; color: #1E40AF; font-size: 14px;">
+        <strong>Staff / Sender Note:</strong><br>
+        <span style="white-space: pre-wrap;">{notes}</span>
+    </div>
+    """ if notes else ""
+
+    html_email = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; color: #0F172A; margin: 0; padding: 24px; }}
+            .container {{ max-width: 760px; margin: 0 auto; background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; }}
+            .header {{ background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color: #FFFFFF; padding: 24px 30px; }}
+            .header-title {{ margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0.5px; }}
+            .header-sub {{ margin: 6px 0 0 0; font-size: 14px; color: #94A3B8; }}
+            .content {{ padding: 24px 30px; }}
+            .stats-grid {{ display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap; }}
+            .stat-box {{ flex: 1; min-width: 120px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; text-align: center; }}
+            .stat-val {{ font-size: 22px; font-weight: 800; }}
+            .stat-lbl {{ font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; margin-top: 4px; }}
+            .badge-bar {{ display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 20px 0; }}
+            .pill {{ background: #F1F5F9; color: #334155; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 6px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }}
+            th {{ background: #F1F5F9; color: #475569; font-weight: 800; text-align: left; padding: 10px 12px; border-bottom: 2px solid #CBD5E1; }}
+            .footer {{ background: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 18px 30px; text-align: center; font-size: 12px; color: #94A3B8; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div class="header-title">🎓 AQ Academic Portal</div>
+                <div class="header-sub">Official Student Attendance & Analytics Report</div>
+            </div>
+
+            <div class="content">
+                <h2 style="margin: 0 0 8px 0; font-size: 18px; color: #0F172A;">{email_subject}</h2>
+                <div class="badge-bar">
+                    <span class="pill">🏢 Dept: {dept_label}</span>
+                    <span class="pill">📚 Sem: {sem_label}</span>
+                    <span class="pill">📅 Date: {date_label}</span>
+                    <span class="pill">👤 Shared by: {user_name}</span>
+                </div>
+
+                {notes_section}
+
+                <div style="display: table; width: 100%; margin: 18px 0;">
+                    <div style="display: table-row;">
+                        <div style="display: table-cell; padding: 10px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; text-align: center; width: 20%;">
+                            <div style="font-size: 22px; font-weight: 800; color: #0F172A;">{total_records}</div>
+                            <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Logs</div>
+                        </div>
+                        <div style="display: table-cell; width: 2%;"></div>
+                        <div style="display: table-cell; padding: 10px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; text-align: center; width: 20%;">
+                            <div style="font-size: 22px; font-weight: 800; color: #10B981;">{present_count}</div>
+                            <div style="font-size: 11px; font-weight: 700; color: #065F46; text-transform: uppercase;">Present (P)</div>
+                        </div>
+                        <div style="display: table-cell; width: 2%;"></div>
+                        <div style="display: table-cell; padding: 10px; background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 8px; text-align: center; width: 20%;">
+                            <div style="font-size: 22px; font-weight: 800; color: #DC2626;">{absent_count}</div>
+                            <div style="font-size: 11px; font-weight: 700; color: #991B1B; text-transform: uppercase;">Absent (A)</div>
+                        </div>
+                        <div style="display: table-cell; width: 2%;"></div>
+                        <div style="display: table-cell; padding: 10px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; text-align: center; width: 20%;">
+                            <div style="font-size: 22px; font-weight: 800; color: #2563EB;">{attendance_rate}%</div>
+                            <div style="font-size: 11px; font-weight: 700; color: #1E40AF; text-transform: uppercase;">Rate %</div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 style="margin: 24px 0 10px 0; font-size: 15px; font-weight: 800; color: #0F172A;">Attendance Log Breakdown</h3>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Student Name</th>
+                                <th>Roll No</th>
+                                <th>Class & Sem</th>
+                                <th>Subject</th>
+                                <th>Date & Time</th>
+                                <th style="text-align: center;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {table_rows_html if table_rows_html else '<tr><td colspan="6" style="padding: 20px; text-align: center; color: #94A3B8;">No attendance records found matching filters.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+
+                {more_records_note}
+            </div>
+
+            <div class="footer">
+                AQ Attendance System • Automated Campus Reporting Service • Sent via {user_name}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    # Dispatch Email via smtplib
+    smtp_server = os.environ.get('SMTP_SERVER', 'smtp.gmail.com')
+    smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+    smtp_email = os.environ.get('SMTP_EMAIL') or os.environ.get('MAIL_USERNAME') or os.environ.get('EMAIL_USER')
+    smtp_password = os.environ.get('SMTP_PASSWORD') or os.environ.get('MAIL_PASSWORD') or os.environ.get('EMAIL_PASS')
+
+    email_sent = False
+    delivery_note = ""
+
+    if smtp_email and smtp_password:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.base import MIMEBase
+        from email import encoders
+
+        try:
+            msg = MIMEMultipart('mixed')
+            msg['From'] = f"AQ Academic Portal <{smtp_email}>"
+            msg['To'] = recipient_email
+            msg['Subject'] = email_subject
+
+            # Attach HTML part
+            html_part = MIMEText(html_email, 'html')
+            msg.attach(html_part)
+
+            # Attach CSV part
+            if include_csv:
+                csv_part = MIMEBase('text', 'csv')
+                csv_part.set_payload(csv_content.encode('utf-8'))
+                encoders.encode_base64(csv_part)
+                clean_dept_name = dept_label.replace(' ', '_')
+                csv_filename = f"AQ_Attendance_{clean_dept_name}.csv"
+                csv_part.add_header('Content-Disposition', f'attachment; filename="{csv_filename}"')
+                msg.attach(csv_part)
+
+            # Connect and send
+            recipients = [r.strip() for r in recipient_email.split(',') if r.strip()]
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(smtp_email, smtp_password)
+                server.sendmail(smtp_email, recipients, msg.as_string())
+            
+            email_sent = True
+            delivery_note = f"Report successfully emailed to {recipient_email} via SMTP ({smtp_server})."
+        except Exception as mail_err:
+            print("SMTP Error while sending email:", mail_err)
+            return jsonify({
+                'success': False,
+                'error': f"Failed to send email via SMTP: {str(mail_err)}. Please check your Gmail App Password / SMTP settings in .env."
+            }), 500
+    else:
+        # Fallback simulation when SMTP credentials are not yet set in .env
+        email_sent = True
+        delivery_note = f"Email report generated and ready for {recipient_email}. (To enable direct Gmail SMTP delivery, set SMTP_EMAIL and SMTP_PASSWORD in your .env file)."
+
+    return jsonify({
+        'success': True,
+        'message': delivery_note,
+        'recipient': recipient_email,
+        'records_count': total_records,
+        'attendance_rate': f"{attendance_rate}%",
+        'simulated': not bool(smtp_email and smtp_password)
+    })
+
 
 def get_local_ip():
     """

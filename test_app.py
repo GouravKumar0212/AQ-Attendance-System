@@ -414,7 +414,127 @@ class AQTestCase(unittest.TestCase):
         res_invalid = self.app.post('/api/student/mark-attendance', data=json.dumps(invalid_coords_payload), content_type='application/json')
         self.assertEqual(res_invalid.status_code, 400)
 
+    def test_15_staff_student_list_semester_and_search_filters(self):
+        """Test Staff Student List filtering by semester and search term."""
+        self.login('cs_faculty', 'staff123')
+
+        # 1. Filter by specific semester (Semester 4)
+        res_sem = self.app.get('/api/staff/students?semester=Semester%204')
+        self.assertEqual(res_sem.status_code, 200)
+        data_sem = json.loads(res_sem.data)
+        self.assertTrue(data_sem['success'])
+        students = data_sem['students']
+        self.assertTrue(len(students) > 0)
+        for s in students:
+            self.assertEqual(s['semester'], 'Semester 4')
+            self.assertEqual(s['department'], 'Computer Science')
+
+        # 2. Filter by semester that has no students (e.g. Semester 8)
+        res_empty = self.app.get('/api/staff/students?semester=Semester%208')
+        self.assertEqual(res_empty.status_code, 200)
+        data_empty = json.loads(res_empty.data)
+        self.assertEqual(len(data_empty['students']), 0)
+
+        # 3. Search by student name
+        res_search = self.app.get('/api/staff/students?search=Alice')
+        self.assertEqual(res_search.status_code, 200)
+        data_search = json.loads(res_search.data)
+        self.assertTrue(any('Alice' in s['full_name'] for s in data_search['students']))
+
+        # 4. Search by roll number
+        res_roll = self.app.get('/api/staff/students?search=CS-101')
+        self.assertEqual(res_roll.status_code, 200)
+        data_roll = json.loads(res_roll.data)
+        self.assertEqual(len(data_roll['students']), 1)
+        self.assertEqual(data_roll['students'][0]['roll_no'], 'CS-101')
+
+    def test_16_advanced_attendance_filters(self):
+        """Test advanced attendance filtering by date range, status, class, and threshold."""
+        self.login('admin', 'admin123')
+
+        # Insert some test attendance rows across various dates
+        with app.app_context():
+            conn = get_db_connection()
+            st = conn.execute("SELECT id FROM users WHERE username = 'student1'").fetchone()
+            st_id = st['id']
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO attendance (student_id, student_name, roll_no, department, class_name, semester, subject, session_id, date, time, status)
+                VALUES (?, 'Alice Smith', 'CS-101', 'Computer Science', 'B.Tech CS', 'Semester 4', 'Operating Systems', 'SESS-ADV', '2026-08-10', '10:00:00 AM', 'Present')
+            ''', (st_id,))
+            cursor.execute('''
+                INSERT INTO attendance (student_id, student_name, roll_no, department, class_name, semester, subject, session_id, date, time, status)
+                VALUES (?, 'Alice Smith', 'CS-101', 'Computer Science', 'B.Tech CS', 'Semester 4', 'Operating Systems', 'SESS-ADV', '2026-08-11', '10:00:00 AM', 'Absent')
+            ''', (st_id,))
+            conn.commit()
+            conn.close()
+
+        # Filter by date range (from_date & to_date)
+        res_range = self.app.get('/api/admin/attendance?from_date=2026-08-10&to_date=2026-08-11')
+        self.assertEqual(res_range.status_code, 200)
+        data_range = json.loads(res_range.data)
+        dates = [r['date'] for r in data_range['attendance']]
+        self.assertIn('2026-08-10', dates)
+        self.assertIn('2026-08-11', dates)
+
+        # Filter by status = 'Absent'
+        res_absent = self.app.get('/api/admin/attendance?status=Absent')
+        self.assertEqual(res_absent.status_code, 200)
+        data_absent = json.loads(res_absent.data)
+        for r in data_absent['attendance']:
+            self.assertEqual(r['status'], 'Absent')
+
+        # Filter by class_name = 'B.Tech CS'
+        res_class = self.app.get('/api/admin/attendance?class_name=B.Tech%20CS')
+        self.assertEqual(res_class.status_code, 200)
+        data_class = json.loads(res_class.data)
+        for r in data_class['attendance']:
+            self.assertEqual(r['class_name'], 'B.Tech CS')
+
+    def test_17_export_csv_without_session_id(self):
+        """Test export CSV endpoint excludes Session ID column as requested."""
+        self.login('admin', 'admin123')
+
+        res_csv = self.app.get('/api/admin/export-attendance?department=Computer%20Science')
+        self.assertEqual(res_csv.status_code, 200)
+        self.assertIn('text/csv', res_csv.headers['Content-Type'])
+        csv_text = res_csv.data.decode('utf-8')
+        
+        # Check header
+        first_line = csv_text.splitlines()[0]
+        self.assertNotIn('Session ID', first_line)
+        self.assertNotIn('Session Code', first_line)
+        self.assertIn('Student Name', first_line)
+        self.assertIn('Roll No', first_line)
+        self.assertIn('Status', first_line)
+
+    def test_18_share_attendance_report_email(self):
+        """Test share report to any recipient email endpoint."""
+        self.login('admin', 'admin123')
+
+        payload = {
+            'recipient_email': 'faculty_dean@university.edu',
+            'subject': 'Monthly Attendance Summary - CS Dept',
+            'notes': 'Please find the monthly report attached.',
+            'department': 'Computer Science',
+            'semester': 'Semester 4',
+            'include_csv': True,
+            'include_html': True
+        }
+
+        res = self.app.post('/api/attendance/share-email', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.data)
+        self.assertTrue(data['success'])
+        self.assertEqual(data['recipient'], 'faculty_dean@university.edu')
+        self.assertIn('records_count', data)
+
+        # Missing recipient email should fail
+        res_fail = self.app.post('/api/attendance/share-email', data=json.dumps({'recipient_email': ''}), content_type='application/json')
+        self.assertEqual(res_fail.status_code, 400)
+
 if __name__ == '__main__':
     import time
     unittest.main()
+
 
