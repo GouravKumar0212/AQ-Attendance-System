@@ -6,6 +6,11 @@ Task: Provides REST API endpoints, database ORM wrappers, authentication, attend
 import os
 import sqlite3
 import socket
+import time
+import threading
+from datetime import timedelta
+from functools import wraps
+from collections import defaultdict
 from flask import Flask, render_template, request, jsonify, session, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from totp_engine import create_totp_payload, verify_totp_payload, get_seconds_remaining
@@ -49,14 +54,136 @@ except ImportError:
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = os.environ.get('SECRET_KEY', 'aq_college_super_secret_key_2026')
 
-@app.route('/static/<path:filename>')
-def serve_static(filename):
+# --- ENTERPRISE SECURITY & COOKIE HARDENING ---
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = bool(os.environ.get('VERCEL') or os.environ.get('HTTPS') == 'on')
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max request size
+
+# --- IN-MEMORY IP RATE LIMITER ---
+_rate_limits = defaultdict(list)
+_rate_lock = threading.Lock()
+
+def rate_limit(max_requests=10, window_seconds=60, error_message="Too many requests. Please wait a minute and try again."):
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            if app.config.get('TESTING') and not app.config.get('ENABLE_RATE_LIMIT_TEST'):
+                return f(*args, **kwargs)
+
+            forwarded = request.headers.get('X-Forwarded-For')
+            ip = forwarded.split(',')[0].strip() if forwarded else (request.remote_addr or '127.0.0.1')
+            endpoint = request.endpoint or f.__name__
+            key = f"{ip}:{endpoint}"
+            now = time.time()
+
+            with _rate_lock:
+                timestamps = [t for t in _rate_limits[key] if now - t < window_seconds]
+                if len(timestamps) >= max_requests:
+                    retry_after = int(window_seconds - (now - timestamps[0])) + 1
+                    resp = jsonify({
+                        'success': False,
+                        'error': error_message,
+                        'message': error_message,
+                        'retry_after_seconds': retry_after
+                    })
+                    resp.status_code = 429
+                    resp.headers['Retry-After'] = str(retry_after)
+                    return resp
+
+                timestamps.append(now)
+                _rate_limits[key] = timestamps
+
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
+
+# --- SAFE STATIC FILE SERVING WITH PATH TRAVERSAL SHIELD ---
+SAFE_STATIC_EXTENSIONS = {
+    '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
+    '.webp', '.woff', '.woff2', '.ttf', '.eot', '.json', '.map'
+}
+
+@app.before_request
+def validate_static_and_security():
     """
-    Task: Serve static assets (CSS, JS, images) with explicit MIME types.
+    Task: Intercept incoming requests before dispatch. Block static path traversal and unsafe file access.
     """
-    static_dir = os.path.join(os.path.dirname(__file__), 'static')
-    mimetype = 'text/css' if filename.endswith('.css') else ('application/javascript' if filename.endswith('.js') else None)
-    return send_from_directory(static_dir, filename, mimetype=mimetype)
+    if request.path.startswith('/static/'):
+        rel_path = request.path[len('/static/'):]
+        if '..' in rel_path or '\\' in rel_path:
+            return jsonify({'error': 'Access denied.'}), 403
+
+        _, ext = os.path.splitext(rel_path.lower())
+        if not ext or ext not in SAFE_STATIC_EXTENSIONS:
+            return jsonify({'error': 'Access denied. Invalid or restricted resource extension.'}), 403
+
+# --- ENTERPRISE OWASP SECURITY HEADERS ---
+@app.after_request
+def apply_security_headers(response):
+    """
+    Task: Enforce enterprise OWASP security headers on all HTTP responses.
+    Mitigates XSS, Clickjacking, MIME-sniffing, Data Injection, and Session Sniffing.
+    """
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: https: blob:; "
+        "connect-src 'self' https://api.qrserver.com https://*.supabase.co https://*.supabase.in; "
+        "frame-ancestors 'self'; "
+        "base-uri 'self'; "
+        "form-action 'self';"
+    )
+    response.headers['Content-Security-Policy'] = csp
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(self), camera=(self), microphone=(), payment=()'
+
+    if os.environ.get('VERCEL') or os.environ.get('HTTPS') == 'on':
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
+
+    response.headers.pop('Server', None)
+    response.headers['X-Powered-By'] = 'AQ-SecureEngine/2026'
+
+    return response
+
+# --- CENTRALIZED ERROR SHIELD (PREVENTS STACK TRACE & DEBUG LEAKAGE) ---
+@app.errorhandler(400)
+def handle_bad_request(e):
+    return jsonify({'success': False, 'error': 'Bad request. Parameter validation failed.'}), 400
+
+@app.errorhandler(401)
+def handle_unauthorized(e):
+    return jsonify({'success': False, 'error': 'Unauthorized. Authentication required.'}), 401
+
+@app.errorhandler(403)
+def handle_forbidden(e):
+    return jsonify({'success': False, 'error': 'Forbidden. You do not have permission to access this resource.'}), 403
+
+@app.errorhandler(404)
+def handle_not_found(e):
+    if request.path.startswith('/api/'):
+        return jsonify({'success': False, 'error': 'API endpoint not found.'}), 404
+    return render_template('index.html'), 200
+
+@app.errorhandler(405)
+def handle_method_not_allowed(e):
+    return jsonify({'success': False, 'error': 'Method Not Allowed.'}), 405
+
+@app.errorhandler(429)
+def handle_rate_limit_exceeded(e):
+    return jsonify({'success': False, 'error': 'Too many requests. Please slow down and try again.'}), 429
+
+@app.errorhandler(500)
+def handle_internal_server_error(e):
+    app.logger.error(f"Internal Error: {e}")
+    return jsonify({'success': False, 'error': 'An internal error occurred. Please try again later.'}), 500
+
 
 
 class PgRowWrapper(dict):
@@ -510,9 +637,11 @@ def index():
     return render_template('index.html')
 
 @app.route('/api/login', methods=['POST'])
+@rate_limit(max_requests=10, window_seconds=60, error_message="Too many login attempts. Please wait 60 seconds and try again.")
 def login():
     """
     Task: Authenticate user login credentials, verify role assignment, and establish session state.
+    Protected against brute-force and session fixation attacks.
     """
     data = request.get_json() or {}
     username = data.get('username', '').strip()
@@ -521,6 +650,9 @@ def login():
     
     if not username or not password:
         return jsonify({'success': False, 'message': 'Username and password are required.'}), 400
+
+    if len(username) > 100 or len(password) > 128:
+        return jsonify({'success': False, 'message': 'Invalid input length.'}), 400
         
     conn = get_db_connection()
     user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
@@ -535,10 +667,13 @@ def login():
     if expected_role and user['role'] != expected_role:
         return jsonify({'success': False, 'message': f"Account found, but it is not registered as a {expected_role.capitalize()}."}), 403
         
+    # Prevent session fixation by resetting existing session before binding new user
+    session.clear()
     session['user_id'] = user['id']
     session['username'] = user['username']
     session['role'] = user['role']
     session['full_name'] = user['full_name']
+    session.permanent = True
     
     return jsonify({
         'success': True,
@@ -622,6 +757,12 @@ def create_user():
     if not username or not password or not full_name or not role:
         return jsonify({'error': 'Username, password, full name, and role are required.'}), 400
         
+    if len(username) < 3 or len(username) > 50:
+        return jsonify({'error': 'Username must be between 3 and 50 characters.'}), 400
+
+    if len(password) < 6 or len(password) > 128:
+        return jsonify({'error': 'Password must be at least 6 characters in length.'}), 400
+
     if role not in ['staff', 'student']:
         return jsonify({'error': 'Role must be either "staff" or "student".'}), 400
         
@@ -772,6 +913,7 @@ def get_staff_totp_qr():
 
 
 @app.route('/api/student/mark-attendance', methods=['POST'])
+@rate_limit(max_requests=20, window_seconds=60, error_message="Too many attendance scan requests. Please wait a moment and try again.")
 def mark_student_attendance():
     """
     Task: Process student QR code submission, verify permanent campus QR validity, validate campus geofencing location, and insert Present record for today.
@@ -789,10 +931,6 @@ def mark_student_attendance():
             return jsonify({'error': totp_err_msg}), 400
 
     # --- Geolocation Verification ---
-    # Require the student's device to report GPS coordinates and confirm
-    # they are physically within the campus radius before accepting the
-    # scan. This blocks QR codes forwarded off-campus (e.g. via WhatsApp)
-    # from being scanned remotely.
     student_lat = data.get('lat')
     student_lng = data.get('lng')
 
@@ -804,6 +942,14 @@ def mark_student_attendance():
         return jsonify({
             'error': 'Location access is required to mark attendance. Please allow location permission and try again.'
         }), 400
+
+    try:
+        lat_f = float(student_lat)
+        lng_f = float(student_lng)
+        if not (-90.0 <= lat_f <= 90.0 and -180.0 <= lng_f <= 180.0):
+            return jsonify({'error': 'Invalid GPS coordinates out of geographical range.'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid coordinate numbers.'}), 400
 
     inside_campus, distance = is_within_campus(student_lat, student_lng)
     if not inside_campus:

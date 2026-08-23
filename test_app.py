@@ -508,6 +508,87 @@ class AQTestCase(unittest.TestCase):
         self.assertIn('Roll No', first_line)
         self.assertIn('Status', first_line)
 
+    def test_18_owasp_security_headers(self):
+        """Test OWASP enterprise security headers are returned on all responses."""
+        res = self.app.get('/')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('Content-Security-Policy', res.headers)
+        self.assertIn('X-Frame-Options', res.headers)
+        self.assertEqual(res.headers['X-Frame-Options'], 'SAMEORIGIN')
+        self.assertEqual(res.headers['X-Content-Type-Options'], 'nosniff')
+        self.assertEqual(res.headers['X-XSS-Protection'], '1; mode=block')
+        self.assertEqual(res.headers['Referrer-Policy'], 'strict-origin-when-cross-origin')
+        self.assertIn('geolocation=(self)', res.headers.get('Permissions-Policy', ''))
+
+    def test_19_static_file_path_traversal_protection(self):
+        """Test static asset endpoint blocks directory traversal and sensitive files."""
+        # Attempt to access non-whitelisted extension
+        res_py = self.app.get('/static/app.py')
+        self.assertEqual(res_py.status_code, 403)
+
+        # Attempt to access .env
+        res_env = self.app.get('/static/.env')
+        self.assertEqual(res_env.status_code, 403)
+
+        # Attempt to access database file
+        res_db = self.app.get('/static/database.db')
+        self.assertEqual(res_db.status_code, 403)
+
+        # Legitimate CSS / JS file should succeed
+        res_css = self.app.get('/static/style.css')
+        self.assertEqual(res_css.status_code, 200)
+
+    def test_20_rate_limiting_login(self):
+        """Test in-memory rate limiter returns 429 when max login attempts are exceeded."""
+        app.config['ENABLE_RATE_LIMIT_TEST'] = True
+        try:
+            status_codes = []
+            for _ in range(12):
+                res = self.app.post('/api/login', 
+                    data=json.dumps({'username': 'baduser', 'password': 'wrongpassword'}),
+                    content_type='application/json'
+                )
+                status_codes.append(res.status_code)
+
+            # At least one request must be throttled with HTTP 429
+            self.assertIn(429, status_codes)
+        finally:
+            app.config['ENABLE_RATE_LIMIT_TEST'] = False
+
+    def test_21_error_shield_and_sanitization(self):
+        """Test API errors return clean JSON without exposing python traceback details."""
+        res_404 = self.app.get('/api/nonexistent-endpoint-12345')
+        self.assertEqual(res_404.status_code, 404)
+        data = json.loads(res_404.data)
+        self.assertFalse(data['success'])
+        self.assertIn('not found', data['error'].lower())
+
+    def test_22_password_and_input_validation(self):
+        """Test password length and input constraints on account creation."""
+        self.login('admin', 'admin123')
+
+        # Password too short (< 6 chars)
+        res_short_pwd = self.app.post('/api/admin/users', data=json.dumps({
+            'username': 'newuser123',
+            'password': '123',
+            'full_name': 'Test Short',
+            'role': 'student',
+            'department': 'Computer Science'
+        }), content_type='application/json')
+        self.assertEqual(res_short_pwd.status_code, 400)
+        data = json.loads(res_short_pwd.data)
+        self.assertIn('at least 6 characters', data['error'])
+
+        # Username too short (< 3 chars)
+        res_short_user = self.app.post('/api/admin/users', data=json.dumps({
+            'username': 'ab',
+            'password': 'validpassword123',
+            'full_name': 'Test Short User',
+            'role': 'student',
+            'department': 'Computer Science'
+        }), content_type='application/json')
+        self.assertEqual(res_short_user.status_code, 400)
+
 if __name__ == '__main__':
     import time
     unittest.main()

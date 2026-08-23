@@ -2039,7 +2039,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="poster-box">
                             <div class="brand">🎓 AQ ACADEMIC PORTAL</div>
                             <div class="sub-brand">Official Classroom Attendance Notice</div>
-                            <div class="badge">✨ OFFICIAL PERMANENT ATTENDANCE QR</div>
+                            <div class="badge">✨ ATTENDANCE QR</div>
                             
                             <div class="meta-box">
                                 <div>Department: <strong>${dept}</strong> | All Classes & Semesters</div>
@@ -2047,21 +2047,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
 
                             <div class="qr-container">
-                                <img src="${qrSrc}" alt="Permanent Campus QR Code">
+                                <img src="${qrSrc}" alt="QR Code">
                             </div>
 
-                            <div class="geofence-alert">
-                                📍 College Campus Geofence Enforced (800m Radius)<br>
-                                Scans are validated using student GPS coordinates.
-                            </div>
-
-                            <div class="instructions">
-                                <strong>Instructions for Students:</strong><br>
-                                1. Open your <em>AQ Student Portal</em> on your mobile device.<br>
-                                2. Tap <strong>Scan Attendance QR Code</strong> and allow location access.<br>
-                                3. Attendance is marked for the current day. 1 scan per student per day.<br>
-                                4. This QR code is permanent and valid across all calendar dates for lifetime.
-                            </div>
+                            
                         </div>
                         <script>
                             window.onload = function() { window.print(); };
