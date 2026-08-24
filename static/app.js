@@ -628,8 +628,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopCameraScan = async () => {
         if (html5QrScannerInstance) {
             try {
-                await html5QrScannerInstance.stop();
-                html5QrScannerInstance.clear();
+                if (html5QrScannerInstance.isScanning) {
+                    await html5QrScannerInstance.stop();
+                }
+                await html5QrScannerInstance.clear();
             } catch (e) {
                 console.warn('Camera stop error:', e);
             }
@@ -647,12 +649,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const placeholder = document.getElementById('qr-reader-placeholder');
         if (placeholder) placeholder.style.display = 'none';
 
-        if (qrScanStatusMsg) qrScanStatusMsg.textContent = 'Requesting camera permission...';
+        if (qrScanStatusMsg) qrScanStatusMsg.textContent = 'Starting camera scanner...';
 
         try {
-            if (html5QrScannerInstance) {
-                await stopCameraScan();
-            }
+            await stopCameraScan();
+
             html5QrScannerInstance = new Html5Qrcode("qr-reader", {
                 experimentalFeatures: {
                     useBarCodeDetectorIfSupported: true
@@ -660,15 +661,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 verbose: false
             });
 
-            // High performance scanner configuration: 25 FPS and dynamic 85% wide viewfinder
+            // High performance scanner configuration: 25 FPS and dynamic 85% wide viewfinder with fallback dimensions
             const qrConfig = {
                 fps: 25,
                 qrbox: (viewfinderWidth, viewfinderHeight) => {
-                    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                    const qrboxSize = Math.floor(minEdge * 0.85);
+                    const w = (viewfinderWidth && viewfinderWidth > 50) ? viewfinderWidth : 280;
+                    const h = (viewfinderHeight && viewfinderHeight > 50) ? viewfinderHeight : 280;
+                    const minEdge = Math.min(w, h);
+                    const qrboxSize = Math.max(180, Math.floor(minEdge * 0.85));
                     return { width: qrboxSize, height: qrboxSize };
                 },
-                aspectRatio: 1.0,
                 showTorchButtonIfSupported: true
             };
 
@@ -682,35 +684,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
 
-            const cameraConstraints = {
-                facingMode: { ideal: "environment" },
-                width: { min: 640, ideal: 1280, max: 1920 },
-                height: { min: 480, ideal: 720, max: 1080 }
-            };
+            let cameraStarted = false;
 
-            // Attempt Camera 1: Rear Environment Camera with high definition
+            // Strategy 1: Discover cameras and start with the environment/rear camera by ID
             try {
-                await html5QrScannerInstance.start(cameraConstraints, qrConfig, onScanSuccess, () => { });
-            } catch (errRear) {
-                console.warn('Rear camera constraint failed, trying basic environment facingMode:', errRear);
-                // Attempt Camera 2: Basic environment facingMode
+                const cameras = await Html5Qrcode.getCameras();
+                if (cameras && cameras.length > 0) {
+                    const backCam = cameras.find(c => /back|rear|environment|wide|main/i.test(c.label)) || cameras[cameras.length - 1];
+                    await html5QrScannerInstance.start(backCam.id, qrConfig, onScanSuccess, () => { });
+                    cameraStarted = true;
+                }
+            } catch (enumErr) {
+                console.warn('Camera enumeration strategy fallback:', enumErr);
+            }
+
+            // Strategy 2: Direct environment facingMode
+            if (!cameraStarted) {
                 try {
                     await html5QrScannerInstance.start({ facingMode: "environment" }, qrConfig, onScanSuccess, () => { });
-                } catch (errBasicEnv) {
-                    console.warn('Environment camera unavailable, trying front user camera:', errBasicEnv);
-                    // Attempt Camera 3: Front User Camera
-                    try {
-                        await html5QrScannerInstance.start({ facingMode: "user" }, qrConfig, onScanSuccess, () => { });
-                    } catch (errFront) {
-                        console.warn('Front camera unavailable, checking camera device list:', errFront);
-                        // Attempt Camera 4: Enumerate camera list
-                        const cameras = await Html5Qrcode.getCameras();
-                        if (cameras && cameras.length > 0) {
-                            await html5QrScannerInstance.start(cameras[0].id, qrConfig, onScanSuccess, () => { });
-                        } else {
-                            throw errFront;
-                        }
-                    }
+                    cameraStarted = true;
+                } catch (envErr) {
+                    console.warn('Environment facingMode fallback:', envErr);
+                }
+            }
+
+            // Strategy 3: Direct user facingMode (front camera)
+            if (!cameraStarted) {
+                try {
+                    await html5QrScannerInstance.start({ facingMode: "user" }, qrConfig, onScanSuccess, () => { });
+                    cameraStarted = true;
+                } catch (userErr) {
+                    console.warn('User facingMode fallback:', userErr);
+                    throw userErr;
                 }
             }
 
@@ -719,15 +724,25 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Camera Scanner Error:', err);
             if (placeholder) placeholder.style.display = 'block';
 
+            const errStr = (err && (err.message || err.name || String(err))).toLowerCase();
             const isHttpRemote = (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
+
             if (isHttpRemote) {
                 const httpsUrl = `https://${window.location.hostname}:5000`;
                 if (qrScanStatusMsg) {
-                    qrScanStatusMsg.innerHTML = `🔒 Mobile Chrome/Safari restricts camera to HTTPS. <a href="${httpsUrl}" target="_blank" style="color: #F59E0B; text-decoration: underline; font-weight: 800;">Open HTTPS (${httpsUrl})</a> or tap Snap / Upload QR.`;
+                    qrScanStatusMsg.innerHTML = `🔒 Mobile Chrome/Safari requires HTTPS for camera. <a href="${httpsUrl}" target="_blank" style="color: #F59E0B; text-decoration: underline; font-weight: 800;">Open HTTPS (${httpsUrl})</a> or tap Snap / Upload QR.`;
+                }
+            } else if (errStr.includes('notallowed') || errStr.includes('permission')) {
+                if (qrScanStatusMsg) {
+                    qrScanStatusMsg.textContent = '⚠️ Camera permission was blocked by browser. Please allow camera access in your browser settings (tap 🔒 in address bar), then tap Live Camera.';
+                }
+            } else if (errStr.includes('notreadable') || errStr.includes('trackstart') || errStr.includes('busy') || errStr.includes('could not start')) {
+                if (qrScanStatusMsg) {
+                    qrScanStatusMsg.textContent = '⚠️ Camera is being used by another application. Please close other camera apps, then tap Live Camera.';
                 }
             } else {
                 if (qrScanStatusMsg) {
-                    qrScanStatusMsg.textContent = '⚠️ Camera unavailable or permission denied. Tap Snap / Upload QR to select a photo.';
+                    qrScanStatusMsg.textContent = '⚠️ Camera ready. Tap Live Camera to retry, or tap Snap / Upload QR to scan photo.';
                 }
             }
         }
@@ -747,7 +762,10 @@ document.addEventListener('DOMContentLoaded', () => {
             // Pre-warm geolocation in background immediately so GPS fix is ready on scan
             prewarmedLocationPromise = getCurrentLocation();
 
-            startCameraScan();
+            // Wait 50ms for modal container layout rendering before starting camera stream
+            setTimeout(() => {
+                startCameraScan();
+            }, 50);
         });
     }
 
