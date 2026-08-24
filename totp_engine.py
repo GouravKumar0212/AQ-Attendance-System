@@ -190,8 +190,8 @@ def run_staff_generator(session_id="SESS-CS101", subject="Whole Day Attendance",
     if has_qr:
         qr = qrcode.QRCode(
             version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_H,
-            box_size=10,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=12,
             border=4,
         )
         qr.add_data(json.dumps(payload))

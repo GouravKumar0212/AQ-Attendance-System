@@ -985,6 +985,17 @@ textarea:hover,
 .qr-canvas-box img {
     max-width: 100% !important;
     height: auto !important;
+    display: block;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+}
+
+#qr-reader video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    border-radius: 8px;
 }
 
 .qr-info-centered {

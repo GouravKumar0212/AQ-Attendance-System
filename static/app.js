@@ -623,6 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const studentMonthFilter = document.getElementById('studentMonthFilter');
 
     let html5QrScannerInstance = null;
+    let prewarmedLocationPromise = null;
 
     const stopCameraScan = async () => {
         if (html5QrScannerInstance) {
@@ -652,8 +653,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (html5QrScannerInstance) {
                 await stopCameraScan();
             }
-            html5QrScannerInstance = new Html5Qrcode("qr-reader");
-            const qrConfig = { fps: 10, qrbox: { width: 220, height: 220 } };
+            html5QrScannerInstance = new Html5Qrcode("qr-reader", {
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                },
+                verbose: false
+            });
+
+            // High performance scanner configuration: 25 FPS and dynamic 85% wide viewfinder
+            const qrConfig = {
+                fps: 25,
+                qrbox: (viewfinderWidth, viewfinderHeight) => {
+                    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                    const qrboxSize = Math.floor(minEdge * 0.85);
+                    return { width: qrboxSize, height: qrboxSize };
+                },
+                aspectRatio: 1.0,
+                showTorchButtonIfSupported: true
+            };
 
             const onScanSuccess = (decodedText) => {
                 if (qrPayloadInput) qrPayloadInput.value = decodedText;
@@ -665,22 +682,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
 
-            // Attempt Camera 1: Rear Environment Camera
+            const cameraConstraints = {
+                facingMode: { ideal: "environment" },
+                width: { min: 640, ideal: 1280, max: 1920 },
+                height: { min: 480, ideal: 720, max: 1080 }
+            };
+
+            // Attempt Camera 1: Rear Environment Camera with high definition
             try {
-                await html5QrScannerInstance.start({ facingMode: "environment" }, qrConfig, onScanSuccess, () => { });
+                await html5QrScannerInstance.start(cameraConstraints, qrConfig, onScanSuccess, () => { });
             } catch (errRear) {
-                console.warn('Rear camera unavailable, trying front camera:', errRear);
-                // Attempt Camera 2: Front User Camera
+                console.warn('Rear camera constraint failed, trying basic environment facingMode:', errRear);
+                // Attempt Camera 2: Basic environment facingMode
                 try {
-                    await html5QrScannerInstance.start({ facingMode: "user" }, qrConfig, onScanSuccess, () => { });
-                } catch (errFront) {
-                    console.warn('Front camera unavailable, checking camera list:', errFront);
-                    // Attempt Camera 3: Enumerate camera list
-                    const cameras = await Html5Qrcode.getCameras();
-                    if (cameras && cameras.length > 0) {
-                        await html5QrScannerInstance.start(cameras[0].id, qrConfig, onScanSuccess, () => { });
-                    } else {
-                        throw errFront;
+                    await html5QrScannerInstance.start({ facingMode: "environment" }, qrConfig, onScanSuccess, () => { });
+                } catch (errBasicEnv) {
+                    console.warn('Environment camera unavailable, trying front user camera:', errBasicEnv);
+                    // Attempt Camera 3: Front User Camera
+                    try {
+                        await html5QrScannerInstance.start({ facingMode: "user" }, qrConfig, onScanSuccess, () => { });
+                    } catch (errFront) {
+                        console.warn('Front camera unavailable, checking camera device list:', errFront);
+                        // Attempt Camera 4: Enumerate camera list
+                        const cameras = await Html5Qrcode.getCameras();
+                        if (cameras && cameras.length > 0) {
+                            await html5QrScannerInstance.start(cameras[0].id, qrConfig, onScanSuccess, () => { });
+                        } else {
+                            throw errFront;
+                        }
                     }
                 }
             }
@@ -714,6 +743,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (scanQrForm) scanQrForm.reset();
             if (scanQrModal) scanQrModal.classList.remove('hidden');
+
+            // Pre-warm geolocation in background immediately so GPS fix is ready on scan
+            prewarmedLocationPromise = getCurrentLocation();
+
             startCameraScan();
         });
     }
@@ -722,6 +755,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (startCameraScanBtn) {
         startCameraScanBtn.addEventListener('click', (e) => {
             e.preventDefault();
+            prewarmedLocationPromise = getCurrentLocation();
             startCameraScan();
         });
     }
@@ -733,7 +767,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const file = e.target.files[0];
                 if (qrScanStatusMsg) qrScanStatusMsg.textContent = '🔍 Decoding QR Code from photo...';
                 try {
-                    const tempScanner = new Html5Qrcode("qr-reader");
+                    const tempScanner = new Html5Qrcode("qr-reader", {
+                        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+                        verbose: false
+                    });
                     const decodedText = await tempScanner.scanFile(file, true);
                     if (qrPayloadInput) qrPayloadInput.value = decodedText;
                     if (qrScanStatusMsg) qrScanStatusMsg.textContent = '✅ QR Code Read Successfully!';
@@ -753,6 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const closeScanQrModal = () => {
         stopCameraScan();
+        prewarmedLocationPromise = null;
         if (scanQrModal) scanQrModal.classList.add('hidden');
     };
 
@@ -760,15 +798,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cancelScanQrModalBtn) cancelScanQrModalBtn.addEventListener('click', closeScanQrModal);
 
     // Wraps the browser Geolocation API in a Promise so it can be awaited
-    // before submitting the scan. Requires HTTPS (or localhost) to work,
-    // since browsers block geolocation on plain HTTP origins.
+    // before submitting the scan. Pre-warmed with 30s cache for instant submission.
     const getCurrentLocation = () => {
         return new Promise((resolve, reject) => {
             if (!navigator.geolocation) {
                 reject(new Error('Geolocation is not supported by this browser.'));
                 return;
             }
-            // Attempt High Accuracy GPS positioning first
+            // Attempt High Accuracy GPS positioning with 30-second cache
             navigator.geolocation.getCurrentPosition(
                 (position) => resolve({
                     lat: position.coords.latitude,
@@ -783,10 +820,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             lng: position.coords.longitude
                         }),
                         (lowAccErr) => reject(highAccErr || lowAccErr),
-                        { enableHighAccuracy: false, timeout: 15000, maximumAge: 5000 }
+                        { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
                     );
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
             );
         });
     };
@@ -813,13 +850,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // --- Geolocation capture ---
-            // Fetch the student's current GPS position and attach it to the
-            // payload so the server can confirm they are on campus. If the
-            // student denies permission or location can't be acquired, we
-            // block the submission rather than send attendance without it.
+            // Fetch the student's current GPS position (or use pre-warmed fix).
             if (qrScanStatusMsg) qrScanStatusMsg.textContent = '📍 Verifying your location…';
             try {
-                const coords = await getCurrentLocation();
+                const coords = await (prewarmedLocationPromise || getCurrentLocation());
                 payloadObj.lat = coords.lat;
                 payloadObj.lng = coords.lng;
             } catch (locErr) {
@@ -1938,19 +1972,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (typeof QRCode !== 'undefined') {
                     new QRCode(qrcodeCanvas, {
                         text: JSON.stringify(payload),
-                        width: 200,
-                        height: 200,
+                        width: 280,
+                        height: 280,
                         colorDark: "#0F172A",
                         colorLight: "#ffffff",
-                        correctLevel: QRCode.CorrectLevel.H
+                        correctLevel: QRCode.CorrectLevel.M
                     });
                 } else {
                     const encodedData = encodeURIComponent(JSON.stringify(payload));
-                    qrcodeCanvas.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodedData}" alt="Permanent Campus QR Code" style="max-width: 200px; border-radius: 8px;">`;
+                    qrcodeCanvas.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&ecc=M&data=${encodedData}" alt="Permanent Campus QR Code" style="max-width: 280px; border-radius: 8px;">`;
                 }
             } catch (err) {
                 const encodedData = encodeURIComponent(JSON.stringify(payload));
-                qrcodeCanvas.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodedData}" alt="Permanent Campus QR Code" style="max-width: 200px; border-radius: 8px;">`;
+                qrcodeCanvas.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&ecc=M&data=${encodedData}" alt="Permanent Campus QR Code" style="max-width: 280px; border-radius: 8px;">`;
             }
 
             if (qrSessionCode) qrSessionCode.textContent = sessionId;
