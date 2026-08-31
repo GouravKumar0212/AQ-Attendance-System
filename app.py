@@ -1199,15 +1199,52 @@ def mark_student_attendance():
             WHERE student_id = ? AND date = ?
         ''', (user_id, date_str)).fetchone()
 
-        if existing_today:
-            conn.close()
-            return jsonify({'error': f'Attendance already marked for today ({date_str})! Scanning is limited to once per day.'}), 400
-
         student_name = student['full_name']
         roll_no = student['roll_no'] if student['roll_no'] else 'N/A'
         student_dept = student['department'] if student['department'] else (department or 'General Studies')
         student_class = student['class_name'] if student['class_name'] else (class_name or 'General Class')
         student_sem = student['semester'] if ('semester' in student.keys() and student['semester']) else ''
+
+        lat_val = float(student_lat)
+        lng_val = float(student_lng)
+        dist_val = round(float(distance), 2) if distance >= 0 else 0.0
+
+        if existing_today:
+            existing_status = str(existing_today['status'] or '').strip().lower()
+            if existing_status in ['present', 'p']:
+                conn.close()
+                return jsonify({'error': f'Attendance already marked for today ({date_str})! Scanning is limited to once per day.'}), 400
+            else:
+                # Update existing Absent / Holiday / Leave record to Present
+                cursor = conn.cursor()
+                try:
+                    cursor.execute('''
+                        UPDATE attendance 
+                        SET status = 'Present', subject = ?, session_id = ?, time = ?, latitude = ?, longitude = ?, distance_meters = ?, department = ?, class_name = ?, semester = ?
+                        WHERE id = ?
+                    ''', (subject, session_id, time_str, lat_val, lng_val, dist_val, student_dept, student_class, student_sem, existing_today['id']))
+                    conn.commit()
+                    conn.close()
+                    return jsonify({
+                        'success': True,
+                        'message': f"Attendance marked as Present for {subject}!",
+                        'attendance': {
+                            'subject': subject,
+                            'session_id': session_id,
+                            'date': date_str,
+                            'time': time_str,
+                            'status': 'Present',
+                            'latitude': lat_val,
+                            'longitude': lng_val,
+                            'distance_meters': dist_val
+                        }
+                    })
+                except Exception as update_err:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    app.logger.error(f"[Attendance Update Status Error]: {update_err}")
 
         lat_val = float(student_lat)
         lng_val = float(student_lng)
