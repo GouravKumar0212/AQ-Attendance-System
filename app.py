@@ -218,27 +218,6 @@ class PgCursorWrapper:
     def execute(self, sql, params=None):
         sql_pg = sql.replace('?', '%s')
         params_tuple = tuple(params) if params is not None else ()
-        
-        is_insert = sql.strip().upper().startswith('INSERT')
-        if is_insert and 'RETURNING' not in sql.upper():
-            clean_sql = sql_pg.rstrip().rstrip(';')
-            query_with_returning = clean_sql + ' RETURNING id'
-            try:
-                self.cursor.execute(query_with_returning, params_tuple)
-                try:
-                    res = self.cursor.fetchone()
-                    if res:
-                        if isinstance(res, (tuple, list)) and len(res) > 0:
-                            self.lastrowid = res[0]
-                        elif hasattr(res, 'get'):
-                            self.lastrowid = res.get('id')
-                except Exception:
-                    pass
-                return self
-            except Exception:
-                # If RETURNING id isn't supported on table or failed, execute original
-                pass
-
         self.cursor.execute(sql_pg, params_tuple)
         return self
 
@@ -784,6 +763,9 @@ def create_user():
     ''', (username, pass_hash, full_name, role, department, email, class_name, semester, roll_no))
     conn.commit()
     new_id = cursor.lastrowid
+    if not new_id:
+        user_row = conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
+        new_id = user_row['id'] if user_row else None
     conn.close()
     
     return jsonify({
@@ -1190,8 +1172,10 @@ def mark_student_attendance():
         subject = str(data.get('subject', '')).strip() or 'Classroom Attendance'
         class_name = str(data.get('class', '') or data.get('class_name', '')).strip()
         department = str(data.get('department', '')).strip()
-        date_str = str(data.get('date', '')).strip()
-        time_str = str(data.get('time', '')).strip()
+        import datetime
+        now = datetime.datetime.now()
+        date_str = str(data.get('date', '')).strip() or now.strftime('%Y-%m-%d')
+        time_str = str(data.get('time', '')).strip() or now.strftime('%I:%M:%S %p')
 
         if not session_id:
             import time
@@ -1208,13 +1192,6 @@ def mark_student_attendance():
         if not student:
             conn.close()
             return jsonify({'error': 'Student record not found in system database. Please log in again.'}), 404
-
-        import datetime
-        now = datetime.datetime.now()
-        if not date_str:
-            date_str = now.strftime('%Y-%m-%d')
-        if not time_str:
-            time_str = now.strftime('%I:%M:%S %p')
 
         # Check if student already has a record for today
         existing_today = conn.execute('''
@@ -1244,11 +1221,16 @@ def mark_student_attendance():
             ''', (user_id, student_name, roll_no, student_dept, student_class, student_sem, subject, session_id, date_str, time_str, lat_val, lng_val, dist_val))
             conn.commit()
         except Exception as insert_err:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
             err_text = str(insert_err).lower()
             # If unique constraint violation
-            if 'unique' in err_text or 'duplicate' in err_text:
+            if 'unique' in err_text or 'duplicate' in err_text or '23505' in err_text:
                 conn.close()
-                return jsonify({'error': f'Attendance already marked for today ({date_str}).'}), 400
+                return jsonify({'error': f'Attendance already marked for today ({date_str})! Scanning is limited to once per day.'}), 400
 
             # Schema self-healing if columns missing in PostgreSQL or SQLite
             try:
@@ -1271,8 +1253,15 @@ def mark_student_attendance():
                 ''', (user_id, student_name, roll_no, student_dept, student_class, student_sem, subject, session_id, date_str, time_str, lat_val, lng_val, dist_val))
                 conn.commit()
             except Exception as retry_err:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 app.logger.error(f"[Attendance Insert/Migration Error]: {retry_err}")
                 conn.close()
+                retry_text = str(retry_err).lower()
+                if 'unique' in retry_text or 'duplicate' in retry_text or '23505' in retry_text:
+                    return jsonify({'error': f'Attendance already marked for today ({date_str})! Scanning is limited to once per day.'}), 400
                 return jsonify({'error': f'Could not record attendance: {str(insert_err)}'}), 400
 
         conn.close()
