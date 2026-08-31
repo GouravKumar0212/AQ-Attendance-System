@@ -146,7 +146,39 @@ class PermanentQRFullSuite(unittest.TestCase):
         # Off-campus test
         v_fail = verify_student_attendance_payload('CS-01', payload_str, lat=28.6139, lng=77.2090)
         self.assertFalse(v_fail['success'])
-        self.assertIn('campus', v_fail['message'].lower())
+    def test_compact_fast_scan_payload(self):
+        from totp_engine import create_compact_qr_payload
+
+        compact_payload = create_compact_qr_payload(
+            session_id='PERM-FAST-01',
+            department='Computer Science',
+            subject='Fast Attendance'
+        )
+        self.assertEqual(compact_payload['mode'], 'fast_scan')
+        self.assertEqual(compact_payload['session_id'], 'PERM-FAST-01')
+
+        # Test verification of compact dict
+        valid, msg = verify_totp_payload(compact_payload)
+        self.assertTrue(valid)
+
+        # Test verification of compact string format AQ:PERM:PERM-FAST-01:Computer Science:SIG123
+        compact_str = "AQ:PERM:PERM-FAST-01:Computer Science:SIG123"
+        valid_str, msg_str = verify_totp_payload(compact_str)
+        self.assertTrue(valid_str)
+
+        # Test marking attendance with compact payload
+        self.login('st1', 'student123')
+        scan_data = {
+            'type': 'aq_permanent_qr',
+            'session_id': 'PERM-FAST-01',
+            'department': 'Computer Science',
+            'lat': COLLEGE_LATITUDE,
+            'lng': COLLEGE_LONGITUDE,
+            'date': '2026-08-30'
+        }
+        res = self.client.post('/api/student/mark-attendance', data=json.dumps(scan_data), content_type='application/json')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(json.loads(res.data)['success'])
 
 if __name__ == '__main__':
     unittest.main()

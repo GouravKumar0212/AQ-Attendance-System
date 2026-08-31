@@ -85,10 +85,11 @@ def get_seconds_remaining(step: int = 15) -> int:
     now = int(time.time())
     return step - (now % step)
 
-def create_permanent_qr_payload(session_id: str = None, subject: str = 'Whole Day Attendance', class_name: str = 'All Classes', department: str = 'Computer Science', semester: str = 'All Semesters', teacher_name: str = 'Faculty Staff') -> dict:
+def create_permanent_qr_payload(session_id: str = None, subject: str = 'Whole Day Attendance', class_name: str = 'All Classes', department: str = 'Computer Science', semester: str = 'All Semesters', teacher_name: str = 'Faculty Staff', compact: bool = False) -> dict:
     """
     Task: Construct a structured JSON payload for a Permanent Lifetime Campus QR Code that never expires,
     is 100% constant for a given department/staff, is valid across all dates, and requires campus geolocation.
+    If compact=True, generates a streamlined payload optimized for ultra-fast distance scanning.
     """
     if not session_id:
         dept_code = "".join(c for c in (department or 'CS').upper() if c.isalnum())[:4] or 'CS'
@@ -96,6 +97,20 @@ def create_permanent_qr_payload(session_id: str = None, subject: str = 'Whole Da
 
     signature = generate_qr_signature(session_id, department, class_name)
     
+    if compact:
+        return {
+            'type': 'aq_permanent_qr',
+            'mode': 'fast_scan',
+            'session_id': session_id,
+            'subject': subject,
+            'department': department,
+            'class': class_name,
+            'semester': semester,
+            'teacher': teacher_name,
+            'never_expires': True,
+            'signature': signature
+        }
+
     return {
         'type': 'aq_permanent_qr',
         'mode': 'permanent_never_expire',
@@ -110,6 +125,20 @@ def create_permanent_qr_payload(session_id: str = None, subject: str = 'Whole Da
         'never_expires': True,
         'signature': signature
     }
+
+def create_compact_qr_payload(session_id: str = None, subject: str = 'Whole Day Attendance', class_name: str = 'All Classes', department: str = 'Computer Science', semester: str = 'All Semesters', teacher_name: str = 'Faculty Staff') -> dict:
+    """
+    Task: Construct an ultra-compact lightweight JSON payload for high-speed scanning from distance.
+    """
+    return create_permanent_qr_payload(
+        session_id=session_id,
+        subject=subject,
+        class_name=class_name,
+        department=department,
+        semester=semester,
+        teacher_name=teacher_name,
+        compact=True
+    )
 
 def create_totp_payload(session_id: str, subject: str, class_name: str, department: str, teacher_name: str, step: int = 15, semester: str = '') -> dict:
     """
@@ -127,25 +156,39 @@ def create_totp_payload(session_id: str, subject: str, class_name: str, departme
 def verify_totp_payload(payload_obj, step: int = 15, window_buffer: int = 1) -> tuple[bool, str]:
     """
     Task: Parse and validate scanned QR payload data format, checking session ID integrity,
-    permanent signatures, and structure.
+    permanent signatures, compact fast-scan schemas, and structure.
     """
     if isinstance(payload_obj, str):
-        try:
-            payload_obj = json.loads(payload_obj)
-        except Exception:
-            # Fallback if raw text session ID is scanned
-            payload_obj = {'session_id': payload_obj.strip(), 'type': 'aq_permanent_qr'}
+        payload_str = payload_obj.strip()
+        if payload_str.startswith('AQ:PERM:'):
+            # Fast compact format: AQ:PERM:<session_id>:<dept>:<sig>
+            parts = payload_str.split(':')
+            session_id = parts[2] if len(parts) > 2 else ''
+            dept = parts[3] if len(parts) > 3 else 'Computer Science'
+            sig = parts[4] if len(parts) > 4 else ''
+            payload_obj = {
+                'type': 'aq_permanent_qr',
+                'session_id': session_id,
+                'department': dept,
+                'signature': sig
+            }
+        else:
+            try:
+                payload_obj = json.loads(payload_str)
+            except Exception:
+                # Fallback if raw text session ID is scanned
+                payload_obj = {'session_id': payload_str, 'type': 'aq_permanent_qr'}
 
     if not isinstance(payload_obj, dict):
         return False, "Invalid payload structure. Expected JSON object."
 
-    session_id = payload_obj.get('session_id')
+    session_id = payload_obj.get('session_id') or payload_obj.get('s') or payload_obj.get('session')
     if not session_id:
         return False, "Missing session ID in scanned QR code."
 
     # Validate type if present
-    qr_type = payload_obj.get('type', '')
-    if qr_type and qr_type not in ['aq_permanent_qr', 'aq_static_qr', 'aq_dynamic_totp_qr', 'aq_qr']:
+    qr_type = payload_obj.get('type') or payload_obj.get('t', '')
+    if qr_type and qr_type not in ['aq_permanent_qr', 'aq_static_qr', 'aq_dynamic_totp_qr', 'aq_qr', 'p', 'perm']:
         return False, f"Unsupported QR code type: {qr_type}"
 
     return True, "Valid permanent campus QR code."

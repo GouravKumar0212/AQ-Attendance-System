@@ -900,15 +900,26 @@ def get_staff_totp_qr():
     subject = data.get('subject', '').strip() or "Whole Day Attendance"
     class_name = data.get('class', '').strip() or "All Classes"
     semester = data.get('semester', '').strip() or "All Semesters"
+    compact = str(data.get('compact', '')).lower() in ['1', 'true', 'yes'] or data.get('mode') == 'fast_scan'
 
-    payload = create_totp_payload(
-        session_id=session_id,
-        subject=subject,
-        class_name=class_name,
-        department=department,
-        teacher_name=teacher_name,
-        semester=semester
-    )
+    if compact:
+        payload = create_compact_qr_payload(
+            session_id=session_id,
+            subject=subject,
+            class_name=class_name,
+            department=department,
+            teacher_name=teacher_name,
+            semester=semester
+        )
+    else:
+        payload = create_totp_payload(
+            session_id=session_id,
+            subject=subject,
+            class_name=class_name,
+            department=department,
+            teacher_name=teacher_name,
+            semester=semester
+        )
     return jsonify(payload)
 
 
@@ -925,7 +936,7 @@ def mark_student_attendance():
     data = request.get_json() or {}
 
     # Verify Permanent / Static QR payload if present
-    if data.get('totp_token') or data.get('type') in ['aq_permanent_qr', 'aq_static_qr', 'aq_dynamic_totp_qr'] or data.get('session_id'):
+    if data.get('totp_token') or data.get('type') in ['aq_permanent_qr', 'aq_static_qr', 'aq_dynamic_totp_qr', 'p', 'perm'] or data.get('session_id') or data.get('s'):
         is_valid_totp, totp_err_msg = verify_totp_payload(data)
         if not is_valid_totp:
             return jsonify({'error': totp_err_msg}), 400
@@ -959,7 +970,7 @@ def mark_student_attendance():
             'error': f'Attendance can only be marked from campus. You appear to be about {int(distance)}m away from the permitted zone.'
         }), 400
 
-    session_id = data.get('session_id', '').strip() or data.get('session', '').strip()
+    session_id = data.get('session_id', '').strip() or data.get('session', '').strip() or data.get('s', '').strip()
     subject = data.get('subject', '').strip() or 'Classroom Attendance'
     class_name = data.get('class', '').strip() or data.get('class_name', '').strip()
     department = data.get('department', '').strip()

@@ -575,31 +575,46 @@
                             style="font-size: 0.95rem; color: #94A3B8; margin-top: 0.25rem; text-align: center;">
                             Class & Department</p>
 
-                        <!-- Action Buttons for Permanent QR: Print Classroom Poster & Download PNG -->
-                        <div
-                            style="margin-top: 1rem; display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap;">
-                            <button type="button" id="printQrPosterBtn" class="btn btn-sm"
-                                style="background: #2563EB; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2.5">
-                                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                                    <path
-                                        d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2">
-                                    </path>
-                                    <rect x="6" y="14" width="12" height="8"></rect>
-                                </svg>
-                                <span>Print / Save Poster</span>
-                            </button>
-                            <button type="button" id="downloadQrPngBtn" class="btn btn-sm"
-                                style="background: #10B981; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2.5">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                                <span>Download PNG</span>
-                            </button>
+                        <!-- Fast-Scan Distance Toggle & Action Buttons for Permanent QR -->
+                        <div style="margin-top: 0.85rem; display: flex; flex-direction: column; align-items: center; gap: 0.75rem;">
+                            <div style="display: inline-flex; background: rgba(15, 23, 42, 0.6); padding: 3px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12);">
+                                <button type="button" id="qrModeFastBtn" class="zoom-btn active" style="padding: 0.35rem 0.85rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;">
+                                    <span>⚡ Fast-Scan (High Range)</span>
+                                </button>
+                                <button type="button" id="qrModeStandardBtn" class="zoom-btn" style="padding: 0.35rem 0.85rem; font-size: 0.8rem;">
+                                    <span>Detailed Payload</span>
+                                </button>
+                            </div>
+
+                            <div style="display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap;">
+                                <button type="button" id="openProjectorBtn" class="btn btn-sm"
+                                    style="background: #8B5CF6; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                                    </svg>
+                                    <span>🖥️ Fullscreen Projector</span>
+                                </button>
+                                <button type="button" id="printQrPosterBtn" class="btn btn-sm"
+                                    style="background: #2563EB; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                                        <rect x="6" y="14" width="12" height="8"></rect>
+                                    </svg>
+                                    <span>Print / Save Poster</span>
+                                </button>
+                                <button type="button" id="downloadQrPngBtn" class="btn btn-sm"
+                                    style="background: #10B981; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    <span>Download PNG</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1314,19 +1329,22 @@
 
     <!-- Student Scan Attendance QR Code Modal -->
     <div id="scanQrModal" class="modal-overlay hidden">
-
-        <div class="modal-container">
+        <div class="modal-container" style="max-width: 480px;">
             <div class="modal-header">
-                <h3 style="display: flex; align-items: center; gap: 0.5rem;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.5">
-                        <rect x="3" y="3" width="7" height="7" />
-                        <rect x="14" y="3" width="7" height="7" />
-                        <rect x="14" y="14" width="7" height="7" />
-                        <rect x="3" y="14" width="7" height="7" />
-                    </svg>
-                    <span>Scan Classroom Attendance QR Code</span>
-                </h3>
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <div class="brand-icon" style="width: 32px; height: 32px; font-size: 1rem; border-radius: 8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                    </div>
+                    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800;">Fast QR Scanner</h3>
+                    <span class="scanner-engine-badge" id="scannerEngineBadge">
+                        <span>⚡ 60 FPS Engine</span>
+                    </span>
+                </div>
                 <button id="closeScanQrModalBtn" class="btn-icon" title="Close Modal">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -1336,62 +1354,91 @@
             </div>
 
             <form id="scanQrForm">
-                <div class="modal-body">
-                    <!-- Camera Viewfinder & Reader Container -->
-                    <div
-                        style="background: #0F172A; border-radius: var(--radius-md); padding: 1rem; text-align: center; color: #FFFFFF; position: relative; margin-bottom: 1.25rem; min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                        <div id="qr-reader"
-                            style="width: 100%; max-width: 380px; border-radius: 8px; overflow: hidden; background: #000000; min-height: 220px; display: flex; align-items: center; justify-content: center; position: relative;">
-                            <div id="qr-reader-placeholder" style="padding: 1.25rem 1rem; text-align: center;">
-                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#60A5FA"
-                                    stroke-width="2" style="margin-bottom: 0.4rem;">
-                                    <path
-                                        d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <div class="modal-body" style="padding: 1rem 1.25rem;">
+                    <!-- Ultra-Speed Camera Viewfinder & Reader Container -->
+                    <div class="scanner-viewport-wrapper">
+                        <div id="qr-reader" class="scanner-video-container">
+                            <div id="qr-reader-placeholder" style="padding: 1.5rem 1rem; text-align: center; color: #FFFFFF; z-index: 5;">
+                                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="2" style="margin-bottom: 0.4rem;">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                                     <circle cx="12" cy="13" r="4" />
                                 </svg>
-                                <p style="font-size: 0.85rem; color: #94A3B8; margin: 0.3rem 0;">Scan via live camera or
-                                    snap photo of QR code</p>
+                                <p style="font-size: 0.9rem; color: #94A3B8; margin: 0.3rem 0; font-weight: 600;">Scan teacher's QR code or snap photo</p>
 
-                                <div
-                                    style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.6rem;">
-                                    <button type="button" id="startCameraScanBtn" class="btn btn-primary btn-sm"
-                                        style="background: #2563EB; font-weight: 700;">
-                                        📷 Live Camera
+                                <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.8rem;">
+                                    <button type="button" id="startCameraScanBtn" class="btn btn-primary btn-sm" style="background: #2563EB; font-weight: 700;">
+                                        📷 Start Camera
                                     </button>
 
-                                    <label for="qrFileInput" class="btn btn-secondary btn-sm"
-                                        style="margin: 0; cursor: pointer; background: #8B5CF6; color: #FFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem;">
-                                        📸 Snap / Upload QR
+                                    <label for="qrFileInput" class="btn btn-secondary btn-sm" style="margin: 0; cursor: pointer; background: #8B5CF6; color: #FFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem;">
+                                        📸 Upload / Snap
                                     </label>
-                                    <input type="file" id="qrFileInput" accept="image/*" capture="environment"
-                                        style="display: none;">
+                                    <input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display: none;">
                                 </div>
                             </div>
+
+                            <!-- Animated Reticle & Laser Sweep Frame -->
+                            <div id="scannerReticle" class="scanner-reticle" style="display: none;">
+                                <div class="scanner-corner tl"></div>
+                                <div class="scanner-corner tr"></div>
+                                <div class="scanner-corner bl"></div>
+                                <div class="scanner-corner br"></div>
+                                <div class="scanner-laser" id="scannerLaser"></div>
+                            </div>
                         </div>
-                        <div id="qrScanStatusMsg"
-                            style="font-size: 0.85rem; color: #60A5FA; margin-top: 0.75rem; font-weight: 600;">
-                            Point camera at teacher's live QR screen or tap Snap / Upload
+
+                        <!-- Scanner HUD Toolbar: Torch, Zoom (1x/2x/3x), Camera Switcher, Sound -->
+                        <div class="scanner-controls-hud" id="scannerControlsHud">
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <button type="button" id="toggleTorchBtn" class="scanner-hud-btn" title="Toggle Flashlight / Torch">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                    </svg>
+                                    <span id="torchLabel">Torch</span>
+                                </button>
+
+                                <button type="button" id="switchCameraBtn" class="scanner-hud-btn" title="Switch Front / Rear Camera">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <path d="M20 16l4-4-4-4"></path>
+                                        <path d="M4 8l-4 4 4 4"></path>
+                                        <path d="M24 12H10"></path>
+                                        <path d="M0 12h14"></path>
+                                    </svg>
+                                    <span>Flip</span>
+                                </button>
+                            </div>
+
+                            <!-- Fast Zoom Group for Distance Scanning -->
+                            <div class="zoom-group" id="scannerZoomGroup" title="Fast Zoom for Distance Scanning">
+                                <button type="button" class="zoom-btn active" data-zoom="1">1x</button>
+                                <button type="button" class="zoom-btn" data-zoom="2">2x</button>
+                                <button type="button" class="zoom-btn" data-zoom="3">3x</button>
+                            </div>
+
+                            <button type="button" id="toggleSoundBtn" class="scanner-hud-btn" title="Toggle Sound Feedback">
+                                <span id="soundIcon">🔔</span>
+                            </button>
                         </div>
                     </div>
 
+                    <div id="qrScanStatusMsg" style="font-size: 0.85rem; color: var(--color-navy-light, #2563EB); margin-top: 0.85rem; font-weight: 700; text-align: center; min-height: 1.25rem;">
+                        Align teacher's QR code within the blue frame
+                    </div>
 
-                    <!-- Hidden QR Payload field automatically populated strictly via camera scan or photo upload -->
+                    <!-- Hidden QR Payload field populated on scan -->
                     <input type="hidden" id="qrPayloadInput">
                 </div>
 
-                <div class="modal-footer">
+                <div class="modal-footer" style="padding: 0.85rem 1.25rem;">
                     <button type="button" id="cancelScanQrModalBtn" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" id="submitScanQrBtn" class="btn btn-primary"
-                        style="background: #10B981; border: none; font-weight: 700;">
+                    <button type="submit" id="submitScanQrBtn" class="btn btn-primary" style="background: #10B981; border: none; font-weight: 700;">
                         <span>Submit Attendance</span>
                     </button>
                 </div>
             </form>
-
         </div>
     </div>
 
-    <!-- Manual Attendance Marking Modal (Staff & Admin) -->
     <!-- Manual Attendance Marking Modal (Staff & Admin) -->
     <div id="manualAttendanceModal" class="modal-overlay hidden">
         <div class="modal-container">
@@ -1518,6 +1565,47 @@
                         (H)</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Fullscreen Projector Mode Modal for Faculty / Classrooms -->
+    <div id="projectorModal" class="projector-modal-overlay hidden">
+        <button type="button" class="projector-close-btn" id="closeProjectorBtn" title="Exit Fullscreen (Esc)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+
+        <div class="projector-container">
+            <div class="projector-brand">
+                <div class="brand-icon" style="background: #2563EB; color: #FFF; width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                        <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                    </svg>
+                </div>
+                <span>AQ ACADEMIC PORTAL • CLASSROOM ATTENDANCE</span>
+            </div>
+
+            <div class="projector-clock-pill">
+                <span class="live-status-dot pulse-green"></span>
+                <span id="projectorLiveDate">Aug 18, 2026</span>
+                <span class="clock-divider">•</span>
+                <strong id="projectorLiveTime" style="color: #60A5FA;">00:00:00 AM</strong>
+                <span class="clock-divider">•</span>
+                <span style="color: #34D399; font-size: 0.95rem;">⚡ Instant Distance Scan Ready</span>
+            </div>
+
+            <div class="projector-qr-wrapper">
+                <div id="projectorQrCanvas"></div>
+            </div>
+
+            <div class="projector-meta-box">
+                <div style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;" id="projectorDisplaySubject">Whole Day Attendance</div>
+                <div style="font-size: 0.95rem; color: #94A3B8;" id="projectorDisplayMeta">Computer Science • All Classes & Semesters</div>
+                <div style="font-size: 0.8rem; color: #60A5FA; margin-top: 0.2rem;">📍 Campus Geofence Active (Radius: 800m) • Press Esc or F to exit</div>
+            </div>
         </div>
     </div>
 
