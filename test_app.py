@@ -589,6 +589,65 @@ class AQTestCase(unittest.TestCase):
         }), content_type='application/json')
         self.assertEqual(res_short_user.status_code, 400)
 
+    def test_sample_users_csv_template(self):
+        # 1. Non-admin forbidden
+        self.login('student1', 'student123')
+        res_stud = self.app.get('/api/admin/sample-users-csv')
+        self.assertEqual(res_stud.status_code, 403)
+        self.app.post('/api/logout')
+
+        # 2. Admin success
+        self.login('admin', 'admin123')
+        res_admin = self.app.get('/api/admin/sample-users-csv')
+        self.assertEqual(res_admin.status_code, 200)
+        self.assertEqual(res_admin.mimetype, 'text/csv')
+        self.assertIn('full_name,username,password,role', res_admin.data.decode('utf-8'))
+
+    def test_bulk_csv_user_upload(self):
+        import io
+
+        # 1. Non-admin forbidden
+        self.login('student1', 'student123')
+        csv_data = "full_name,username,password,role,department\nJohn Doe,johndoe,password123,student,Computer Science"
+        res_forbid = self.app.post('/api/admin/upload-csv-users', data={
+            'file': (io.BytesIO(csv_data.encode('utf-8')), 'users.csv')
+        }, content_type='multipart/form-data')
+        self.assertEqual(res_forbid.status_code, 403)
+        self.app.post('/api/logout')
+
+        # 2. Admin uploads valid CSV with students and staff
+        self.login('admin', 'admin123')
+        csv_content = """full_name,username,password,role,department,class_name,semester,roll_no,email
+Rahul Verma,rahul_v01,student123,student,Computer Science,B.Tech CS,Semester 3,CS-301,rahul@college.edu
+Prof. Grace Hopper,grace_hopper,staff123,staff,Computer Science,,,FAC-02,grace@college.edu
+Sneha Gupta,,student123,student,Information Technology,B.Tech IT,Semester 3,IT-302,sneha@college.edu
+"""
+        res_upload = self.app.post('/api/admin/upload-csv-users', data={
+            'file': (io.BytesIO(csv_content.encode('utf-8')), 'users.csv')
+        }, content_type='multipart/form-data')
+        self.assertEqual(res_upload.status_code, 200)
+        data = json.loads(res_upload.data)
+        self.assertTrue(data['success'])
+        self.assertEqual(data['imported_count'], 3)
+        self.assertEqual(data['student_count'], 2)
+        self.assertEqual(data['staff_count'], 1)
+        self.assertEqual(data['skipped_count'], 0)
+
+        # 3. Duplicate username skipping
+        res_dup = self.app.post('/api/admin/upload-csv-users', data={
+            'file': (io.BytesIO(csv_content.encode('utf-8')), 'users.csv')
+        }, content_type='multipart/form-data')
+        self.assertEqual(res_dup.status_code, 200)
+        data_dup = json.loads(res_dup.data)
+        self.assertEqual(data_dup['imported_count'], 0)
+        self.assertEqual(data_dup['skipped_count'], 3)
+
+        # 4. Empty / invalid CSV format handling
+        res_empty = self.app.post('/api/admin/upload-csv-users', data={
+            'file': (io.BytesIO(b''), 'empty.csv')
+        }, content_type='multipart/form-data')
+        self.assertEqual(res_empty.status_code, 400)
+
 if __name__ == '__main__':
     import time
     unittest.main()

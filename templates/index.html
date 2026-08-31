@@ -163,14 +163,25 @@
                     <h2>Administrator Control Panel</h2>
                     <p>Manage college staff, student accounts, and system access</p>
                 </div>
-                <button id="openCreateUserModalBtn" class="btn btn-primary btn-lg">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.5">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    <span>Register New User</span>
-                </button>
+                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                    <button id="openBulkUploadModalBtn" class="btn btn-secondary btn-lg"
+                        style="background: #FFFFFF; border: 2px solid var(--color-primary, #2563EB); color: var(--color-primary, #2563EB); font-weight: 700; display: inline-flex; align-items: center; gap: 0.5rem;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        <span>Bulk Import (CSV)</span>
+                    </button>
+                    <button id="openCreateUserModalBtn" class="btn btn-primary btn-lg">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        <span>Register New User</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Animated Stats Grid -->
@@ -335,19 +346,20 @@
                             <option value="Semester 4">Semester 4</option>
                             <option value="Semester 5">Semester 5</option>
                             <option value="Semester 6">Semester 6</option>
-                            <option value="Semester 7">Semester 7</option>
-                            <option value="Semester 8">Semester 8</option>
+
                         </select>
 
-                        <input type="text" id="adminAttendanceSearch" placeholder="🔍 Search student, roll no, subject..."
-                            class="search-input" style="padding: 0.45rem 0.75rem;">
+                        <input type="text" id="adminAttendanceSearch"
+                            placeholder="🔍 Search student, roll no, subject..." class="search-input"
+                            style="padding: 0.45rem 0.75rem;">
 
                         <!-- Action Buttons & Advanced Filter Toggle -->
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                             <button type="button" id="toggleAdminAdvFiltersBtn" class="btn btn-secondary"
                                 title="Toggle Advanced Filter Options"
                                 style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; padding: 0.5rem 0.85rem; border: 1.5px solid var(--color-border); background: #FFFFFF;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
                                     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
                                 </svg>
                                 <span>Advanced Filters</span>
@@ -385,42 +397,58 @@
                 <!-- Admin Collapsible Advanced Filters Drawer -->
                 <div id="adminAdvancedFilterPanel" class="advanced-filter-panel hidden">
                     <div class="adv-filter-header">
-                        <div style="display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 0.95rem; color: var(--color-navy-dark);">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.5">
+                        <div
+                            style="display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 0.95rem; color: var(--color-navy-dark);">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB"
+                                stroke-width="2.5">
                                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
                             </svg>
                             <span>Advanced Filter Matrix</span>
                         </div>
-                        <button type="button" id="adminResetFiltersBtn" class="btn-reset-filters" title="Reset all filters to defaults">
+                        <button type="button" id="adminResetFiltersBtn" class="btn-reset-filters"
+                            title="Reset all filters to defaults">
                             🔄 Reset All Filters
                         </button>
                     </div>
 
                     <div class="adv-filter-grid">
                         <div class="form-group" style="margin: 0;">
-                            <label for="adminFromDateFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 From Date</label>
-                            <input type="date" id="adminFromDateFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem;">
+                            <label for="adminFromDateFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 From
+                                Date</label>
+                            <input type="date" id="adminFromDateFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem;">
                         </div>
 
                         <div class="form-group" style="margin: 0;">
-                            <label for="adminToDateFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 To Date</label>
-                            <input type="date" id="adminToDateFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem;">
+                            <label for="adminToDateFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 To Date</label>
+                            <input type="date" id="adminToDateFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem;">
                         </div>
 
                         <div class="form-group" style="margin: 0;">
-                            <label for="adminStatusFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🏷️ Attendance Status</label>
-                            <select id="adminStatusFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                            <label for="adminStatusFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🏷️ Attendance
+                                Status</label>
+                            <select id="adminStatusFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
                                 <option value="all">All Statuses</option>
-                                <option value="Present" style="color: #10B981; font-weight: 700;">🟢 Present (P)</option>
+                                <option value="Present" style="color: #10B981; font-weight: 700;">🟢 Present (P)
+                                </option>
                                 <option value="Absent" style="color: #EF4444; font-weight: 700;">🔴 Absent (A)</option>
                                 <option value="Leave" style="color: #F59E0B; font-weight: 700;">🟡 Leave (L)</option>
-                                <option value="Holiday" style="color: #8B5CF6; font-weight: 700;">🟣 Holiday (H)</option>
+                                <option value="Holiday" style="color: #8B5CF6; font-weight: 700;">🟣 Holiday (H)
+                                </option>
                             </select>
                         </div>
 
                         <div class="form-group" style="margin: 0;">
-                            <label for="adminClassFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🎓 Class / Degree</label>
-                            <select id="adminClassFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                            <label for="adminClassFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🎓 Class /
+                                Degree</label>
+                            <select id="adminClassFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
                                 <option value="all">All Classes / Degrees</option>
                                 <option value="B.Tech CS">B.Tech CS</option>
                                 <option value="B.Tech IT">B.Tech IT</option>
@@ -435,12 +463,18 @@
                         </div>
 
                         <div class="form-group" style="margin: 0;">
-                            <label for="adminThresholdFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📊 Attendance % Threshold</label>
-                            <select id="adminThresholdFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                            <label for="adminThresholdFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📊 Attendance %
+                                Threshold</label>
+                            <select id="adminThresholdFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
                                 <option value="all">All Attendance Rates</option>
-                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage (&lt; 45%)</option>
-                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Warning Zone (45% - 74%)</option>
-                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Good Standing (&ge; 75%)</option>
+                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage
+                                    (&lt; 45%)</option>
+                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Warning Zone (45% -
+                                    74%)</option>
+                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Good Standing (&ge;
+                                    75%)</option>
                             </select>
                         </div>
                     </div>
@@ -566,58 +600,51 @@
                                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                             </svg>
-                            <span>Official Permanent QR • Lifetime Valid</span>
+                            <span>QR</span>
                         </div>
-                        <h4 id="qrDisplaySubject"
-                            style="margin-top: 0.6rem; color: #FFFFFF; font-size: 1.35rem; font-weight: 800; text-align: center;">
-                            Whole Day Attendance</h4>
                         <p id="qrDisplayMeta"
                             style="font-size: 0.95rem; color: #94A3B8; margin-top: 0.25rem; text-align: center;">
                             Class & Department</p>
 
-                        <!-- Fast-Scan Distance Toggle & Action Buttons for Permanent QR -->
-                        <div style="margin-top: 0.85rem; display: flex; flex-direction: column; align-items: center; gap: 0.75rem;">
-                            <div style="display: inline-flex; background: rgba(15, 23, 42, 0.6); padding: 3px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12);">
-                                <button type="button" id="qrModeFastBtn" class="zoom-btn active" style="padding: 0.35rem 0.85rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;">
-                                    <span>⚡ Fast-Scan (High Range)</span>
-                                </button>
-                                <button type="button" id="qrModeStandardBtn" class="zoom-btn" style="padding: 0.35rem 0.85rem; font-size: 0.8rem;">
-                                    <span>Detailed Payload</span>
-                                </button>
-                            </div>
 
-                            <div style="display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap;">
-                                <button type="button" id="openProjectorBtn" class="btn btn-sm"
-                                    style="background: #8B5CF6; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                        <line x1="8" y1="21" x2="16" y2="21"></line>
-                                        <line x1="12" y1="17" x2="12" y2="21"></line>
-                                    </svg>
-                                    <span>🖥️ Fullscreen Projector</span>
-                                </button>
-                                <button type="button" id="printQrPosterBtn" class="btn btn-sm"
-                                    style="background: #2563EB; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                                        <rect x="6" y="14" width="12" height="8"></rect>
-                                    </svg>
-                                    <span>Print / Save Poster</span>
-                                </button>
-                                <button type="button" id="downloadQrPngBtn" class="btn btn-sm"
-                                    style="background: #10B981; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                        <polyline points="7 10 12 15 17 10"></polyline>
-                                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                                    </svg>
-                                    <span>Download PNG</span>
-                                </button>
-                            </div>
+
+                        <div style="display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap;">
+                            <button type="button" id="openProjectorBtn" class="btn btn-sm"
+                                style="background: #8B5CF6; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                                </svg>
+                                <span>🖥️ Fullscreen Projector</span>
+                            </button>
+                            <button type="button" id="printQrPosterBtn" class="btn btn-sm"
+                                style="background: #2563EB; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                                    <path
+                                        d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2">
+                                    </path>
+                                    <rect x="6" y="14" width="12" height="8"></rect>
+                                </svg>
+                                <span>Print / Save Poster</span>
+                            </button>
+                            <button type="button" id="downloadQrPngBtn" class="btn btn-sm"
+                                style="background: #10B981; color: #FFFFFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-md);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                <span>Download PNG</span>
+                            </button>
                         </div>
                     </div>
                 </div>
+            </div>
             </div>
 
             <!-- Staff Department Student Roster with Semester Filter -->
@@ -639,14 +666,14 @@
                             <option value="Semester 4">Semester 4</option>
                             <option value="Semester 5">Semester 5</option>
                             <option value="Semester 6">Semester 6</option>
-                            <option value="Semester 7">Semester 7</option>
-                            <option value="Semester 8">Semester 8</option>
+
                         </select>
 
                         <input type="text" id="staffStudentSearchInput" placeholder="🔍 Search name, roll no..."
                             class="search-input" style="padding: 0.45rem 0.75rem;">
 
-                        <span id="staffStudentCountBadge" class="badge badge-staff" style="font-weight: 700;">0 Students</span>
+                        <span id="staffStudentCountBadge" class="badge badge-staff" style="font-weight: 700;">0
+                            Students</span>
                     </div>
                 </div>
 
@@ -715,8 +742,6 @@
                             <option value="Semester 4">Semester 4</option>
                             <option value="Semester 5">Semester 5</option>
                             <option value="Semester 6">Semester 6</option>
-                            <option value="Semester 7">Semester 7</option>
-                            <option value="Semester 8">Semester 8</option>
                         </select>
 
                         <input type="text" id="staffAttendanceSubjectFilter"
@@ -727,7 +752,8 @@
                             <button type="button" id="toggleStaffAdvFiltersBtn" class="btn btn-secondary"
                                 title="Toggle Advanced Filter Options"
                                 style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700; padding: 0.5rem 0.85rem; border: 1.5px solid var(--color-border); background: #FFFFFF;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
                                     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
                                 </svg>
                                 <span>Advanced Filters</span>
@@ -777,42 +803,58 @@
                 <!-- Staff Collapsible Advanced Filters Drawer -->
                 <div id="staffAdvancedFilterPanel" class="advanced-filter-panel hidden">
                     <div class="adv-filter-header">
-                        <div style="display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 0.95rem; color: var(--color-navy-dark);">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.5">
+                        <div
+                            style="display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 0.95rem; color: var(--color-navy-dark);">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB"
+                                stroke-width="2.5">
                                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
                             </svg>
                             <span>Advanced Filter Matrix</span>
                         </div>
-                        <button type="button" id="staffResetFiltersBtn" class="btn-reset-filters" title="Reset all filters to defaults">
+                        <button type="button" id="staffResetFiltersBtn" class="btn-reset-filters"
+                            title="Reset all filters to defaults">
                             🔄 Reset All Filters
                         </button>
                     </div>
 
                     <div class="adv-filter-grid">
                         <div class="form-group" style="margin: 0;">
-                            <label for="staffFromDateFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 From Date</label>
-                            <input type="date" id="staffFromDateFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem;">
+                            <label for="staffFromDateFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 From
+                                Date</label>
+                            <input type="date" id="staffFromDateFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem;">
                         </div>
 
                         <div class="form-group" style="margin: 0;">
-                            <label for="staffToDateFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 To Date</label>
-                            <input type="date" id="staffToDateFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem;">
+                            <label for="staffToDateFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📅 To Date</label>
+                            <input type="date" id="staffToDateFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem;">
                         </div>
 
                         <div class="form-group" style="margin: 0;">
-                            <label for="staffStatusFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🏷️ Attendance Status</label>
-                            <select id="staffStatusFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                            <label for="staffStatusFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🏷️ Attendance
+                                Status</label>
+                            <select id="staffStatusFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
                                 <option value="all">All Statuses</option>
-                                <option value="Present" style="color: #10B981; font-weight: 700;">🟢 Present (P)</option>
+                                <option value="Present" style="color: #10B981; font-weight: 700;">🟢 Present (P)
+                                </option>
                                 <option value="Absent" style="color: #EF4444; font-weight: 700;">🔴 Absent (A)</option>
                                 <option value="Leave" style="color: #F59E0B; font-weight: 700;">🟡 Leave (L)</option>
-                                <option value="Holiday" style="color: #8B5CF6; font-weight: 700;">🟣 Holiday (H)</option>
+                                <option value="Holiday" style="color: #8B5CF6; font-weight: 700;">🟣 Holiday (H)
+                                </option>
                             </select>
                         </div>
 
                         <div class="form-group" style="margin: 0;">
-                            <label for="staffClassFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🎓 Class / Degree</label>
-                            <select id="staffClassFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                            <label for="staffClassFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">🎓 Class /
+                                Degree</label>
+                            <select id="staffClassFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
                                 <option value="all">All Classes / Degrees</option>
                                 <option value="B.Tech CS">B.Tech CS</option>
                                 <option value="B.Tech IT">B.Tech IT</option>
@@ -827,12 +869,18 @@
                         </div>
 
                         <div class="form-group" style="margin: 0;">
-                            <label for="staffThresholdFilter" style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📊 Attendance % Threshold</label>
-                            <select id="staffThresholdFilter" class="search-input" style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
+                            <label for="staffThresholdFilter"
+                                style="font-size: 0.8rem; font-weight: 700; margin-bottom: 0.25rem;">📊 Attendance %
+                                Threshold</label>
+                            <select id="staffThresholdFilter" class="search-input"
+                                style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
                                 <option value="all">All Attendance Rates</option>
-                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage (&lt; 45%)</option>
-                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Warning Zone (45% - 74%)</option>
-                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Good Standing (&ge; 75%)</option>
+                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage
+                                    (&lt; 45%)</option>
+                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Warning Zone (45% -
+                                    74%)</option>
+                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Good Standing (&ge;
+                                    75%)</option>
                             </select>
                         </div>
                     </div>
@@ -1287,8 +1335,6 @@
                                     <option value="Semester 4">Semester 4</option>
                                     <option value="Semester 5">Semester 5</option>
                                     <option value="Semester 6">Semester 6</option>
-                                    <option value="Semester 7">Semester 7</option>
-                                    <option value="Semester 8">Semester 8</option>
                                 </select>
                             </div>
                         </div>
@@ -1327,13 +1373,134 @@
         </div>
     </div>
 
+    <!-- Bulk CSV User Upload Modal (Admin Only) -->
+    <div id="bulkUserUploadModal" class="modal-overlay hidden">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <div>
+                    <h3 style="font-size: 1.3rem; font-weight: 800; color: var(--color-navy-dark); display: flex; align-items: center; gap: 0.5rem;">
+                        <span>📁 Bulk Import Users (CSV)</span>
+                        <span class="badge badge-admin" style="font-size: 0.75rem; text-transform: uppercase;">Admin Only</span>
+                    </h3>
+                    <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-top: 0.15rem;">
+                        Quickly register multiple students and faculty staff simultaneously using a standard CSV spreadsheet
+                    </p>
+                </div>
+                <button id="closeBulkUploadModalBtn" class="btn-icon" title="Close Modal">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <form id="bulkCsvUploadForm">
+                <div class="modal-body">
+                    <!-- Template Download Notice Box -->
+                    <div style="background: #EFF6FF; border: 1.5px solid #BFDBFE; border-radius: var(--radius-md); padding: 1rem 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div style="background: #2563EB; color: #FFF; width: 36px; height: 36px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem;">
+                                📄
+                            </div>
+                            <div>
+                                <div style="font-weight: 800; font-size: 0.95rem; color: #1E40AF;">Standard CSV Template</div>
+                                <div style="font-size: 0.82rem; color: #3B82F6;">Download the pre-formatted CSV template with sample student & staff rows</div>
+                            </div>
+                        </div>
+                        <a href="/api/admin/sample-users-csv" id="downloadSampleCsvBtn" class="btn btn-sm btn-secondary" style="background: #FFFFFF; color: #1E40AF; border: 1.5px solid #93C5FD; font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem; text-decoration: none;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            <span>Download Template (.csv)</span>
+                        </a>
+                    </div>
+
+                    <!-- Drag & Drop Zone -->
+                    <div class="csv-dropzone" id="csvDropzone" style="margin-top: 1.25rem;">
+                        <input type="file" id="bulkCsvFileInput" accept=".csv,text/csv,application/vnd.ms-excel" style="display: none;">
+                        <div class="csv-dropzone-icon">
+                            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="12" y1="18" x2="12" y2="12"></line>
+                                <line x1="9" y1="15" x2="15" y2="15"></line>
+                            </svg>
+                        </div>
+                        <div style="font-weight: 800; font-size: 1.05rem; color: var(--color-navy-dark); margin-top: 0.5rem;">
+                            Drag and drop your .CSV file here
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--color-text-muted); margin: 0.25rem 0 0.75rem;">
+                            or click to browse from your computer
+                        </p>
+                        <button type="button" id="browseCsvBtn" class="btn btn-secondary btn-sm" style="font-weight: 700;">
+                            Browse File
+                        </button>
+                    </div>
+
+                    <!-- Selected File Pill -->
+                    <div id="selectedCsvFileBadge" class="hidden" style="margin-top: 1rem; background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: var(--radius-md); padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 0.6rem;">
+                            <span style="font-size: 1.2rem;">📊</span>
+                            <div>
+                                <div id="selectedCsvFileName" style="font-weight: 800; color: #166534; font-size: 0.92rem;">file.csv</div>
+                                <div id="selectedCsvFileSize" style="font-size: 0.78rem; color: #15803D;">0 KB</div>
+                            </div>
+                        </div>
+                        <button type="button" id="removeSelectedCsvBtn" class="btn-icon" style="color: #DC2626;" title="Remove file">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Supported Columns Hint -->
+                    <div style="margin-top: 1rem; background: #F8FAFC; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 0.85rem 1rem; font-size: 0.82rem; color: var(--color-text-muted);">
+                        <strong style="color: var(--color-navy-dark);">Supported CSV Columns:</strong>
+                        <div style="margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.35rem;">
+                            <code class="badge badge-staff">full_name *</code>
+                            <code class="badge">username</code>
+                            <code class="badge">password</code>
+                            <code class="badge">role (student/staff)</code>
+                            <code class="badge">department</code>
+                            <code class="badge">class_name</code>
+                            <code class="badge">semester</code>
+                            <code class="badge">roll_no</code>
+                            <code class="badge">email</code>
+                        </div>
+                        <div style="margin-top: 0.4rem; font-size: 0.78rem; color: #64748B;">
+                            * If <code>username</code> is omitted, it will be automatically generated from roll number or name. If <code>password</code> is omitted, default initial credentials (<code>student123</code> / <code>staff123</code>) will be assigned.
+                        </div>
+                    </div>
+
+                    <!-- Import Summary / Results Container -->
+                    <div id="bulkUploadResultsBox" class="hidden" style="margin-top: 1rem;">
+                        <!-- Results injected dynamically -->
+                    </div>
+
+                    <div id="bulkUploadError" class="alert alert-error hidden" style="margin-top: 1rem;"></div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="cancelBulkUploadModalBtn" class="btn btn-secondary">Close</button>
+                    <button type="submit" id="submitBulkUploadBtn" class="btn btn-primary" style="font-weight: 800; min-width: 160px;">
+                        <span>Upload & Import Users</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Student Scan Attendance QR Code Modal -->
     <div id="scanQrModal" class="modal-overlay hidden">
         <div class="modal-container" style="max-width: 480px;">
             <div class="modal-header">
                 <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                     <div class="brand-icon" style="width: 32px; height: 32px; font-size: 1rem; border-radius: 8px;">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
                             <rect x="3" y="3" width="7" height="7" />
                             <rect x="14" y="3" width="7" height="7" />
                             <rect x="14" y="14" width="7" height="7" />
@@ -1358,22 +1525,23 @@
                     <!-- Ultra-Speed Camera Viewfinder & Reader Container -->
                     <div class="scanner-viewport-wrapper">
                         <div id="qr-reader" class="scanner-video-container">
-                            <div id="qr-reader-placeholder" style="padding: 1.5rem 1rem; text-align: center; color: #FFFFFF; z-index: 5;">
-                                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="2" style="margin-bottom: 0.4rem;">
-                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                            <div id="qr-reader-placeholder"
+                                style="padding: 1.5rem 1rem; text-align: center; color: #FFFFFF; z-index: 5;">
+                                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#38BDF8"
+                                    stroke-width="2" style="margin-bottom: 0.4rem;">
+                                    <path
+                                        d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                                     <circle cx="12" cy="13" r="4" />
                                 </svg>
-                                <p style="font-size: 0.9rem; color: #94A3B8; margin: 0.3rem 0; font-weight: 600;">Scan teacher's QR code or snap photo</p>
+                                <p style="font-size: 0.9rem; color: #94A3B8; margin: 0.3rem 0; font-weight: 600;">Scan
+                                    teacher's QR code or snap photo</p>
 
-                                <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.8rem;">
-                                    <button type="button" id="startCameraScanBtn" class="btn btn-primary btn-sm" style="background: #2563EB; font-weight: 700;">
+                                <div
+                                    style="display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.8rem;">
+                                    <button type="button" id="startCameraScanBtn" class="btn btn-primary btn-sm"
+                                        style="background: #2563EB; font-weight: 700;">
                                         📷 Start Camera
                                     </button>
-
-                                    <label for="qrFileInput" class="btn btn-secondary btn-sm" style="margin: 0; cursor: pointer; background: #8B5CF6; color: #FFF; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem;">
-                                        📸 Upload / Snap
-                                    </label>
-                                    <input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display: none;">
                                 </div>
                             </div>
 
@@ -1390,22 +1558,16 @@
                         <!-- Scanner HUD Toolbar: Torch, Zoom (1x/2x/3x), Camera Switcher, Sound -->
                         <div class="scanner-controls-hud" id="scannerControlsHud">
                             <div style="display: flex; align-items: center; gap: 0.4rem;">
-                                <button type="button" id="toggleTorchBtn" class="scanner-hud-btn" title="Toggle Flashlight / Torch">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <button type="button" id="toggleTorchBtn" class="scanner-hud-btn"
+                                    title="Toggle Flashlight / Torch">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2.5">
                                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                                     </svg>
                                     <span id="torchLabel">Torch</span>
                                 </button>
 
-                                <button type="button" id="switchCameraBtn" class="scanner-hud-btn" title="Switch Front / Rear Camera">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                        <path d="M20 16l4-4-4-4"></path>
-                                        <path d="M4 8l-4 4 4 4"></path>
-                                        <path d="M24 12H10"></path>
-                                        <path d="M0 12h14"></path>
-                                    </svg>
-                                    <span>Flip</span>
-                                </button>
+
                             </div>
 
                             <!-- Fast Zoom Group for Distance Scanning -->
@@ -1415,13 +1577,15 @@
                                 <button type="button" class="zoom-btn" data-zoom="3">3x</button>
                             </div>
 
-                            <button type="button" id="toggleSoundBtn" class="scanner-hud-btn" title="Toggle Sound Feedback">
+                            <button type="button" id="toggleSoundBtn" class="scanner-hud-btn"
+                                title="Toggle Sound Feedback">
                                 <span id="soundIcon">🔔</span>
                             </button>
                         </div>
                     </div>
 
-                    <div id="qrScanStatusMsg" style="font-size: 0.85rem; color: var(--color-navy-light, #2563EB); margin-top: 0.85rem; font-weight: 700; text-align: center; min-height: 1.25rem;">
+                    <div id="qrScanStatusMsg"
+                        style="font-size: 0.85rem; color: var(--color-navy-light, #2563EB); margin-top: 0.85rem; font-weight: 700; text-align: center; min-height: 1.25rem;">
                         Align teacher's QR code within the blue frame
                     </div>
 
@@ -1431,7 +1595,8 @@
 
                 <div class="modal-footer" style="padding: 0.85rem 1.25rem;">
                     <button type="button" id="cancelScanQrModalBtn" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" id="submitScanQrBtn" class="btn btn-primary" style="background: #10B981; border: none; font-weight: 700;">
+                    <button type="submit" id="submitScanQrBtn" class="btn btn-primary"
+                        style="background: #10B981; border: none; font-weight: 700;">
                         <span>Submit Attendance</span>
                     </button>
                 </div>
@@ -1479,8 +1644,6 @@
                                 <option value="Semester 4">Semester 4</option>
                                 <option value="Semester 5">Semester 5</option>
                                 <option value="Semester 6">Semester 6</option>
-                                <option value="Semester 7">Semester 7</option>
-                                <option value="Semester 8">Semester 8</option>
                             </select>
                         </div>
                     </div>
@@ -1579,8 +1742,10 @@
 
         <div class="projector-container">
             <div class="projector-brand">
-                <div class="brand-icon" style="background: #2563EB; color: #FFF; width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <div class="brand-icon"
+                    style="background: #2563EB; color: #FFF; width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
                         <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
                         <path d="M6 12v5c3 3 9 3 12 0v-5" />
                     </svg>
@@ -1602,9 +1767,12 @@
             </div>
 
             <div class="projector-meta-box">
-                <div style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;" id="projectorDisplaySubject">Whole Day Attendance</div>
-                <div style="font-size: 0.95rem; color: #94A3B8;" id="projectorDisplayMeta">Computer Science • All Classes & Semesters</div>
-                <div style="font-size: 0.8rem; color: #60A5FA; margin-top: 0.2rem;">📍 Campus Geofence Active (Radius: 800m) • Press Esc or F to exit</div>
+                <div style="font-size: 1.25rem; font-weight: 800; color: #FFFFFF;" id="projectorDisplaySubject">Whole
+                    Day Attendance</div>
+                <div style="font-size: 0.95rem; color: #94A3B8;" id="projectorDisplayMeta">Computer Science • All
+                    Classes & Semesters</div>
+                <div style="font-size: 0.8rem; color: #60A5FA; margin-top: 0.2rem;">📍 Campus Geofence Active (Radius:
+                    800m) • Press Esc or F to exit</div>
             </div>
         </div>
     </div>
@@ -1612,4 +1780,4 @@
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 
-</html>
+</html>

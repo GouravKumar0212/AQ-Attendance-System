@@ -8,10 +8,12 @@ import sqlite3
 import socket
 import time
 import threading
+import io
+import csv
 from datetime import timedelta
 from functools import wraps
 from collections import defaultdict
-from flask import Flask, render_template, request, jsonify, session, send_from_directory
+from flask import Flask, render_template, request, jsonify, session, send_from_directory, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from totp_engine import create_totp_payload, verify_totp_payload, get_seconds_remaining
 from geofence import is_within_campus
@@ -824,6 +826,212 @@ def delete_user(user_id):
     conn.close()
     
     return jsonify({'success': True, 'message': 'User deleted successfully.'})
+
+@app.route('/api/admin/sample-users-csv', methods=['GET'])
+def download_sample_users_csv():
+    """
+    Task: Provide a downloadable sample CSV template for bulk user registration.
+    """
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized. Admin access required.'}), 403
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Header row
+    writer.writerow(['full_name', 'username', 'password', 'role', 'department', 'class_name', 'semester', 'roll_no', 'email'])
+    
+    # Sample rows
+    writer.writerow(['Rahul Sharma', 'rahul_cs01', 'student123', 'student', 'Computer Science', 'B.Tech CS', 'Semester 3', 'CS-2026-01', 'rahul@campus.edu'])
+    writer.writerow(['Priya Patel', 'priya_it02', 'student123', 'student', 'Information Technology', 'B.Tech IT', 'Semester 3', 'IT-2026-02', 'priya@campus.edu'])
+    writer.writerow(['Dr. Alan Turing', 'alan_faculty', 'staff123', 'staff', 'Computer Science', '', '', '', 'alan.turing@campus.edu'])
+    
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={
+            'Content-Disposition': 'attachment; filename=aq_users_sample_template.csv',
+            'Content-Type': 'text/csv; charset=utf-8'
+        }
+    )
+
+@app.route('/api/admin/upload-csv-users', methods=['POST'])
+def bulk_upload_users_csv():
+    """
+    Task: Bulk upload student and staff user accounts via CSV file.
+    """
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized. Admin access required.'}), 403
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No CSV file uploaded. Please choose a valid .csv file.'}), 400
+
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'error': 'No selected file.'}), 400
+
+    if not (file.filename.lower().endswith('.csv') or file.content_type in ['text/csv', 'application/vnd.ms-excel', 'text/plain']):
+        return jsonify({'error': 'Invalid file format. Please upload a .csv file.'}), 400
+
+    try:
+        content = file.stream.read().decode("utf-8-sig")
+        stream = io.StringIO(content, newline=None)
+        reader = csv.DictReader(stream)
+    except Exception as e:
+        return jsonify({'error': f'Failed to parse CSV file: {str(e)}'}), 400
+
+    if not reader.fieldnames:
+        return jsonify({'error': 'CSV file is empty or missing header row.'}), 400
+
+    # Normalize header mapping (strip whitespace and lower-case keys)
+    header_map = {}
+    for fn in reader.fieldnames:
+        if not fn:
+            continue
+        clean_fn = fn.strip().lower()
+        if clean_fn in ['full_name', 'fullname', 'name', 'student_name', 'staff_name', 'student name', 'staff name']:
+            header_map['full_name'] = fn
+        elif clean_fn in ['username', 'user_name', 'user', 'login', 'user name']:
+            header_map['username'] = fn
+        elif clean_fn in ['password', 'pwd', 'pass']:
+            header_map['password'] = fn
+        elif clean_fn in ['role', 'user_role', 'type', 'account_type', 'user role']:
+            header_map['role'] = fn
+        elif clean_fn in ['department', 'dept', 'branch']:
+            header_map['department'] = fn
+        elif clean_fn in ['class_name', 'class', 'course', 'degree', 'class name']:
+            header_map['class_name'] = fn
+        elif clean_fn in ['semester', 'sem']:
+            header_map['semester'] = fn
+        elif clean_fn in ['roll_no', 'rollno', 'roll_number', 'roll', 'enrollment_no', 'roll no', 'roll number']:
+            header_map['roll_no'] = fn
+        elif clean_fn in ['email', 'email_address', 'mail', 'email address']:
+            header_map['email'] = fn
+
+    if 'full_name' not in header_map:
+        return jsonify({'error': 'CSV must contain at least a "full_name" or "name" column.'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Preload existing usernames and roll numbers to prevent collisions
+    existing_users = {row['username'].lower() for row in conn.execute('SELECT username FROM users').fetchall()}
+    existing_rolls = {row['roll_no'].lower() for row in conn.execute("SELECT roll_no FROM users WHERE roll_no IS NOT NULL AND roll_no != ''").fetchall()}
+
+    imported_count = 0
+    student_count = 0
+    staff_count = 0
+    skipped_count = 0
+    warnings = []
+    created_users = []
+
+    row_idx = 1
+    for row in reader:
+        row_idx += 1
+        raw_full_name = row.get(header_map.get('full_name', ''), '').strip()
+        if not raw_full_name:
+            skipped_count += 1
+            warnings.append(f"Row {row_idx}: Skipped due to empty full name.")
+            continue
+
+        raw_role = row.get(header_map.get('role', ''), 'student').strip().lower()
+        if raw_role not in ['student', 'staff']:
+            raw_role = 'student'
+
+        raw_dept = row.get(header_map.get('department', ''), 'Computer Science').strip()
+        raw_class = row.get(header_map.get('class_name', ''), '').strip()
+        raw_sem = row.get(header_map.get('semester', ''), '').strip()
+        raw_roll = row.get(header_map.get('roll_no', ''), '').strip()
+        raw_email = row.get(header_map.get('email', ''), '').strip()
+
+        # Check duplicate roll number for students
+        if raw_role == 'student' and raw_roll and raw_roll.lower() in existing_rolls:
+            skipped_count += 1
+            warnings.append(f"Row {row_idx} ({raw_full_name}): Roll number '{raw_roll}' already exists (Skipped).")
+            continue
+
+        # Generate or extract username
+        raw_username = row.get(header_map.get('username', ''), '').strip()
+        if not raw_username:
+            if raw_roll:
+                base_username = raw_roll.lower().replace(' ', '_').replace('-', '_')
+            else:
+                base_username = raw_full_name.lower().replace(' ', '_').replace('.', '')
+            
+            # Clean non-alphanumeric chars
+            base_username = ''.join(c for c in base_username if c.isalnum() or c in ['_', '-'])[:30]
+            if len(base_username) < 3:
+                base_username = f"user_{int(time.time() * 1000) % 100000}"
+            
+            if base_username.lower() in existing_users:
+                skipped_count += 1
+                warnings.append(f"Row {row_idx} ({raw_full_name}): Username '{base_username}' already exists (Skipped).")
+                continue
+            raw_username = base_username
+        
+        if len(raw_username) < 3 or len(raw_username) > 50:
+            skipped_count += 1
+            warnings.append(f"Row {row_idx} ({raw_full_name}): Username '{raw_username}' length must be 3-50 chars.")
+            continue
+
+        if raw_username.lower() in existing_users:
+            skipped_count += 1
+            warnings.append(f"Row {row_idx} ({raw_full_name}): Username '{raw_username}' already exists (Skipped).")
+            continue
+
+        # Extract or generate password
+        raw_password = row.get(header_map.get('password', ''), '').strip()
+        if not raw_password or len(raw_password) < 6:
+            raw_password = 'student123' if raw_role == 'student' else 'staff123'
+
+        pass_hash = generate_password_hash(raw_password)
+
+        try:
+            cursor.execute('''
+                INSERT INTO users (username, password_hash, full_name, role, department, email, class_name, semester, roll_no)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (raw_username, pass_hash, raw_full_name, raw_role, raw_dept, raw_email, raw_class, raw_sem, raw_roll))
+            
+            existing_users.add(raw_username.lower())
+            if raw_roll:
+                existing_rolls.add(raw_roll.lower())
+            imported_count += 1
+            if raw_role == 'student':
+                student_count += 1
+            else:
+                staff_count += 1
+            
+            created_users.append({
+                'full_name': raw_full_name,
+                'username': raw_username,
+                'role': raw_role,
+                'department': raw_dept,
+                'class_name': raw_class,
+                'semester': raw_sem,
+                'roll_no': raw_roll
+            })
+        except Exception as insert_err:
+            skipped_count += 1
+            warnings.append(f"Row {row_idx} ({raw_full_name}): Database error ({str(insert_err)}).")
+
+    conn.commit()
+    conn.close()
+
+    summary_msg = f"Imported {imported_count} user{'s' if imported_count != 1 else ''} ({student_count} student{'s' if student_count != 1 else ''}, {staff_count} staff)."
+    if skipped_count > 0:
+        summary_msg += f" {skipped_count} row{'s' if skipped_count != 1 else ''} skipped."
+
+    return jsonify({
+        'success': True,
+        'message': summary_msg,
+        'imported_count': imported_count,
+        'student_count': student_count,
+        'staff_count': staff_count,
+        'skipped_count': skipped_count,
+        'warnings': warnings[:50],
+        'users': created_users[:50]
+    })
 
 @app.route('/api/staff/students', methods=['GET'])
 def get_staff_students():

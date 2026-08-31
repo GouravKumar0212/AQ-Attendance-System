@@ -89,6 +89,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const newRoleSelect = document.getElementById('newRole');
     const studentFieldsContainer = document.getElementById('studentFieldsContainer');
 
+    // Bulk CSV Upload Modal Elements (Admin Only)
+    const bulkUserUploadModal = document.getElementById('bulkUserUploadModal');
+    const openBulkUploadModalBtn = document.getElementById('openBulkUploadModalBtn');
+    const closeBulkUploadModalBtn = document.getElementById('closeBulkUploadModalBtn');
+    const cancelBulkUploadModalBtn = document.getElementById('cancelBulkUploadModalBtn');
+    const bulkCsvUploadForm = document.getElementById('bulkCsvUploadForm');
+    const bulkCsvFileInput = document.getElementById('bulkCsvFileInput');
+    const csvDropzone = document.getElementById('csvDropzone');
+    const browseCsvBtn = document.getElementById('browseCsvBtn');
+    const selectedCsvFileBadge = document.getElementById('selectedCsvFileBadge');
+    const selectedCsvFileName = document.getElementById('selectedCsvFileName');
+    const selectedCsvFileSize = document.getElementById('selectedCsvFileSize');
+    const removeSelectedCsvBtn = document.getElementById('removeSelectedCsvBtn');
+    const bulkUploadResultsBox = document.getElementById('bulkUploadResultsBox');
+    const bulkUploadError = document.getElementById('bulkUploadError');
+    const submitBulkUploadBtn = document.getElementById('submitBulkUploadBtn');
+
     // Staff Elements
     const staffFullName = document.getElementById('staffFullName');
     const staffDepartment = document.getElementById('staffDepartment');
@@ -290,6 +307,190 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } catch (err) {
                 showError(modalError, 'Error connecting to server.');
+            }
+        });
+    }
+
+    // --- Bulk CSV Upload Modal Controller (Admin Only) ---
+    function resetBulkUploadModal() {
+        if (bulkCsvUploadForm) bulkCsvUploadForm.reset();
+        if (bulkCsvFileInput) bulkCsvFileInput.value = '';
+        if (selectedCsvFileBadge) selectedCsvFileBadge.classList.add('hidden');
+        if (bulkUploadResultsBox) {
+            bulkUploadResultsBox.innerHTML = '';
+            bulkUploadResultsBox.classList.add('hidden');
+        }
+        if (bulkUploadError) hideError(bulkUploadError);
+        if (submitBulkUploadBtn) {
+            submitBulkUploadBtn.disabled = false;
+            submitBulkUploadBtn.innerHTML = '<span>Upload & Import Users</span>';
+        }
+    }
+
+    if (openBulkUploadModalBtn) {
+        openBulkUploadModalBtn.addEventListener('click', () => {
+            resetBulkUploadModal();
+            if (bulkUserUploadModal) bulkUserUploadModal.classList.remove('hidden');
+        });
+    }
+
+    if (closeBulkUploadModalBtn) {
+        closeBulkUploadModalBtn.addEventListener('click', () => {
+            if (bulkUserUploadModal) bulkUserUploadModal.classList.add('hidden');
+        });
+    }
+
+    if (cancelBulkUploadModalBtn) {
+        cancelBulkUploadModalBtn.addEventListener('click', () => {
+            if (bulkUserUploadModal) bulkUserUploadModal.classList.add('hidden');
+        });
+    }
+
+    if (bulkUserUploadModal) {
+        bulkUserUploadModal.addEventListener('click', (e) => {
+            if (e.target === bulkUserUploadModal) bulkUserUploadModal.classList.add('hidden');
+        });
+    }
+
+    if (browseCsvBtn && bulkCsvFileInput) {
+        browseCsvBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            bulkCsvFileInput.click();
+        });
+    }
+
+    if (csvDropzone && bulkCsvFileInput) {
+        csvDropzone.addEventListener('click', (e) => {
+            if (e.target !== browseCsvBtn) bulkCsvFileInput.click();
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            csvDropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                csvDropzone.classList.add('dragover');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            csvDropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                csvDropzone.classList.remove('dragover');
+            });
+        });
+
+        csvDropzone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer?.files;
+            if (files && files.length > 0) {
+                bulkCsvFileInput.files = files;
+                handleSelectedCsv(files[0]);
+            }
+        });
+    }
+
+    function handleSelectedCsv(file) {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            showError(bulkUploadError, 'Please select a valid .csv file.');
+            return;
+        }
+        hideError(bulkUploadError);
+        if (selectedCsvFileName) selectedCsvFileName.textContent = file.name;
+        if (selectedCsvFileSize) {
+            const sizeKb = (file.size / 1024).toFixed(1);
+            selectedCsvFileSize.textContent = `${sizeKb} KB • Ready to import`;
+        }
+        if (selectedCsvFileBadge) selectedCsvFileBadge.classList.remove('hidden');
+    }
+
+    if (bulkCsvFileInput) {
+        bulkCsvFileInput.addEventListener('change', (e) => {
+            const file = e.target.files?.[0];
+            if (file) handleSelectedCsv(file);
+        });
+    }
+
+    if (removeSelectedCsvBtn && bulkCsvFileInput) {
+        removeSelectedCsvBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            bulkCsvFileInput.value = '';
+            if (selectedCsvFileBadge) selectedCsvFileBadge.classList.add('hidden');
+        });
+    }
+
+    if (bulkCsvUploadForm) {
+        bulkCsvUploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError(bulkUploadError);
+
+            const file = bulkCsvFileInput?.files?.[0];
+            if (!file) {
+                showError(bulkUploadError, 'Please select or drop a .csv file to import.');
+                return;
+            }
+
+            if (submitBulkUploadBtn) {
+                submitBulkUploadBtn.disabled = true;
+                submitBulkUploadBtn.innerHTML = '<span>⏳ Uploading & Importing...</span>';
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/api/admin/upload-csv-users', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showToast(data.message, 'success');
+                    
+                    // Render rich summary box inside modal
+                    if (bulkUploadResultsBox) {
+                        let warningsHtml = '';
+                        if (data.warnings && data.warnings.length > 0) {
+                            warningsHtml = `
+                                <div class="bulk-warnings-list">
+                                    <div style="font-weight: 700; margin-bottom: 0.25rem;">⚠️ Skipped Rows / Warnings (${data.warnings.length}):</div>
+                                    ${data.warnings.map(w => `<div>• ${escapeHtml(w)}</div>`).join('')}
+                                </div>
+                            `;
+                        }
+
+                        bulkUploadResultsBox.innerHTML = `
+                            <div class="bulk-results-summary">
+                                <div style="font-weight: 800; color: #15803D; font-size: 1rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+                                    <span>🎉 Import Completed Successfully!</span>
+                                </div>
+                                <div class="bulk-results-pills">
+                                    <span class="bulk-pill bulk-pill-success">✓ Total Imported: ${data.imported_count}</span>
+                                    <span class="bulk-pill bulk-pill-success">🎓 Students: ${data.student_count}</span>
+                                    <span class="bulk-pill bulk-pill-success">👨‍🏫 Staff: ${data.staff_count}</span>
+                                    ${data.skipped_count > 0 ? `<span class="bulk-pill bulk-pill-warning">⚠️ Skipped: ${data.skipped_count}</span>` : ''}
+                                </div>
+                                ${warningsHtml}
+                            </div>
+                        `;
+                        bulkUploadResultsBox.classList.remove('hidden');
+                    }
+
+                    // Reload user directory table and counter badges
+                    loadAdminUsers();
+                } else {
+                    showError(bulkUploadError, data.error || 'Failed to process CSV file.');
+                }
+            } catch (err) {
+                showError(bulkUploadError, 'Network error during CSV upload. Please try again.');
+            } finally {
+                if (submitBulkUploadBtn) {
+                    submitBulkUploadBtn.disabled = false;
+                    submitBulkUploadBtn.innerHTML = '<span>Upload & Import Users</span>';
+                }
             }
         });
     }
