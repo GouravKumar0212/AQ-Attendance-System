@@ -225,18 +225,19 @@ class PgCursorWrapper:
             query_with_returning = clean_sql + ' RETURNING id'
             try:
                 self.cursor.execute(query_with_returning, params_tuple)
-                res = self.cursor.fetchone()
-                if res:
-                    if isinstance(res, (tuple, list)) and len(res) > 0:
-                        self.lastrowid = res[0]
-                    elif hasattr(res, 'get'):
-                        self.lastrowid = res.get('id')
-                return self
-            except Exception:
                 try:
-                    self.conn.rollback()
+                    res = self.cursor.fetchone()
+                    if res:
+                        if isinstance(res, (tuple, list)) and len(res) > 0:
+                            self.lastrowid = res[0]
+                        elif hasattr(res, 'get'):
+                            self.lastrowid = res.get('id')
                 except Exception:
                     pass
+                return self
+            except Exception:
+                # If RETURNING id isn't supported on table or failed, execute original
+                pass
 
         self.cursor.execute(sql_pg, params_tuple)
         return self
@@ -1132,119 +1133,168 @@ def get_staff_totp_qr():
 
 
 @app.route('/api/student/mark-attendance', methods=['POST'])
-@rate_limit(max_requests=20, window_seconds=60, error_message="Too many attendance scan requests. Please wait a moment and try again.")
+@rate_limit(max_requests=25, window_seconds=60, error_message="Too many attendance scan requests. Please wait a moment and try again.")
 def mark_student_attendance():
     """
     Task: Process student QR code submission, verify permanent campus QR validity, validate campus geofencing location, and insert Present record for today.
     """
-    if session.get('role') != 'student':
-        return jsonify({'error': 'Unauthorized access. Student account required.'}), 403
-
-    user_id = session.get('user_id')
-    data = request.get_json() or {}
-
-    # Verify Permanent / Static QR payload if present
-    if data.get('totp_token') or data.get('type') in ['aq_permanent_qr', 'aq_static_qr', 'aq_dynamic_totp_qr', 'p', 'perm'] or data.get('session_id') or data.get('s'):
-        is_valid_totp, totp_err_msg = verify_totp_payload(data)
-        if not is_valid_totp:
-            return jsonify({'error': totp_err_msg}), 400
-
-    # --- Geolocation Verification ---
-    student_lat = data.get('lat')
-    student_lng = data.get('lng')
-
-    if app.config.get('TESTING') and (student_lat is None or student_lng is None):
-        student_lat = 24.495374689123384
-        student_lng = 72.80818369745779
-
-    if student_lat is None or student_lng is None:
-        return jsonify({
-            'error': 'Location access is required to mark attendance. Please allow location permission and try again.'
-        }), 400
-
     try:
-        lat_f = float(student_lat)
-        lng_f = float(student_lng)
-        if not (-90.0 <= lat_f <= 90.0 and -180.0 <= lng_f <= 180.0):
-            return jsonify({'error': 'Invalid GPS coordinates out of geographical range.'}), 400
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid coordinate numbers.'}), 400
+        if session.get('role') != 'student':
+            return jsonify({'error': 'Unauthorized access. Please log in with a Student account.'}), 403
 
-    inside_campus, distance = is_within_campus(student_lat, student_lng)
-    if not inside_campus:
-        if distance < 0:
-            return jsonify({'error': 'Invalid location data received. Please try scanning again.'}), 400
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Student session has expired. Please log in again.'}), 401
+
+        try:
+            data = request.get_json(force=True, silent=True) or {}
+        except Exception:
+            data = {}
+
+        # Verify Permanent / Static QR payload if present
+        if data.get('totp_token') or data.get('type') in ['aq_permanent_qr', 'aq_static_qr', 'aq_dynamic_totp_qr', 'aq_qr', 'p', 'perm'] or data.get('session_id') or data.get('s'):
+            is_valid_totp, totp_err_msg = verify_totp_payload(data)
+            if not is_valid_totp:
+                return jsonify({'error': totp_err_msg}), 400
+
+        # --- Geolocation Verification ---
+        student_lat = data.get('lat')
+        student_lng = data.get('lng')
+
+        if app.config.get('TESTING') and (student_lat is None or student_lng is None):
+            student_lat = 24.495374689123384
+            student_lng = 72.80818369745779
+
+        if student_lat is None or student_lng is None or str(student_lat).strip() == '' or str(student_lng).strip() == '':
+            return jsonify({
+                'error': 'Location access is required to mark attendance. Please allow GPS/location permission in your browser settings and try again.'
+            }), 400
+
+        try:
+            lat_f = float(student_lat)
+            lng_f = float(student_lng)
+            if not (-90.0 <= lat_f <= 90.0 and -180.0 <= lng_f <= 180.0):
+                return jsonify({'error': 'Invalid GPS coordinates out of geographical range.'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid coordinate numbers.'}), 400
+
+        inside_campus, distance = is_within_campus(student_lat, student_lng)
+        if not inside_campus:
+            if distance < 0:
+                return jsonify({'error': 'Invalid location data received. Please ensure location is enabled and try scanning again.'}), 400
+            return jsonify({
+                'error': f'Attendance can only be marked from campus. You appear to be about {int(distance)}m away from the permitted zone.'
+            }), 400
+
+        session_id = str(data.get('session_id', '') or data.get('session', '') or data.get('s', '')).strip()
+        subject = str(data.get('subject', '')).strip() or 'Classroom Attendance'
+        class_name = str(data.get('class', '') or data.get('class_name', '')).strip()
+        department = str(data.get('department', '')).strip()
+        date_str = str(data.get('date', '')).strip()
+        time_str = str(data.get('time', '')).strip()
+
+        if not session_id:
+            import time
+            session_id = f"ATT-{int(time.time()) % 100000}"
+
+        try:
+            conn = get_db_connection()
+        except Exception as conn_err:
+            app.logger.error(f"[Database Connection Error in mark_attendance]: {conn_err}")
+            return jsonify({'error': 'Database is momentarily connecting. Please try scanning again in 2 seconds.'}), 503
+
+        student = conn.execute('SELECT id, full_name, roll_no, department, class_name, semester FROM users WHERE id = ?', (user_id,)).fetchone()
+
+        if not student:
+            conn.close()
+            return jsonify({'error': 'Student record not found in system database. Please log in again.'}), 404
+
+        import datetime
+        now = datetime.datetime.now()
+        if not date_str:
+            date_str = now.strftime('%Y-%m-%d')
+        if not time_str:
+            time_str = now.strftime('%I:%M:%S %p')
+
+        # Check if student already has a record for today
+        existing_today = conn.execute('''
+            SELECT id, status, subject FROM attendance 
+            WHERE student_id = ? AND date = ?
+        ''', (user_id, date_str)).fetchone()
+
+        if existing_today:
+            conn.close()
+            return jsonify({'error': f'Attendance already marked for today ({date_str})! Scanning is limited to once per day.'}), 400
+
+        student_name = student['full_name']
+        roll_no = student['roll_no'] if student['roll_no'] else 'N/A'
+        student_dept = student['department'] if student['department'] else (department or 'General Studies')
+        student_class = student['class_name'] if student['class_name'] else (class_name or 'General Class')
+        student_sem = student['semester'] if ('semester' in student.keys() and student['semester']) else ''
+
+        lat_val = float(student_lat)
+        lng_val = float(student_lng)
+        dist_val = round(float(distance), 2) if distance >= 0 else 0.0
+
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO attendance (student_id, student_name, roll_no, department, class_name, semester, subject, session_id, date, time, status, latitude, longitude, distance_meters)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Present', ?, ?, ?)
+            ''', (user_id, student_name, roll_no, student_dept, student_class, student_sem, subject, session_id, date_str, time_str, lat_val, lng_val, dist_val))
+            conn.commit()
+        except Exception as insert_err:
+            err_text = str(insert_err).lower()
+            # If unique constraint violation
+            if 'unique' in err_text or 'duplicate' in err_text:
+                conn.close()
+                return jsonify({'error': f'Attendance already marked for today ({date_str}).'}), 400
+
+            # Schema self-healing if columns missing in PostgreSQL or SQLite
+            try:
+                is_pg = getattr(conn, 'is_pg', False)
+                if is_pg:
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS semester TEXT NOT NULL DEFAULT ''")
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS latitude REAL")
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS longitude REAL")
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS distance_meters REAL")
+                else:
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN semester TEXT NOT NULL DEFAULT ''")
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN latitude REAL")
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN longitude REAL")
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN distance_meters REAL")
+                conn.commit()
+                # Retry insertion
+                cursor.execute('''
+                    INSERT INTO attendance (student_id, student_name, roll_no, department, class_name, semester, subject, session_id, date, time, status, latitude, longitude, distance_meters)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Present', ?, ?, ?)
+                ''', (user_id, student_name, roll_no, student_dept, student_class, student_sem, subject, session_id, date_str, time_str, lat_val, lng_val, dist_val))
+                conn.commit()
+            except Exception as retry_err:
+                app.logger.error(f"[Attendance Insert/Migration Error]: {retry_err}")
+                conn.close()
+                return jsonify({'error': f'Could not record attendance: {str(insert_err)}'}), 400
+
+        conn.close()
+
         return jsonify({
-            'error': f'Attendance can only be marked from campus. You appear to be about {int(distance)}m away from the permitted zone.'
-        }), 400
-
-    session_id = data.get('session_id', '').strip() or data.get('session', '').strip() or data.get('s', '').strip()
-    subject = data.get('subject', '').strip() or 'Classroom Attendance'
-    class_name = data.get('class', '').strip() or data.get('class_name', '').strip()
-    department = data.get('department', '').strip()
-    date_str = data.get('date', '').strip()
-    time_str = data.get('time', '').strip()
-
-    if not session_id:
-        import time
-        session_id = f"ATT-{int(time.time()) % 100000}"
-
-    conn = get_db_connection()
-    student = conn.execute('SELECT id, full_name, roll_no, department, class_name, semester FROM users WHERE id = ?', (user_id,)).fetchone()
-
-    if not student:
-        conn.close()
-        return jsonify({'error': 'Student record not found.'}), 404
-
-    import datetime
-    now = datetime.datetime.now()
-    if not date_str:
-        date_str = now.strftime('%Y-%m-%d')
-    if not time_str:
-        time_str = now.strftime('%I:%M:%S %p')
-
-    # Check if student already has a Present record or scanned QR for today
-    existing_today = conn.execute('''
-        SELECT id, status, subject FROM attendance 
-        WHERE student_id = ? AND date = ?
-    ''', (user_id, date_str)).fetchone()
-
-    if existing_today:
-        conn.close()
-        return jsonify({'error': f'Attendance already marked for today ({date_str})! QR code scanning is restricted to once per day.'}), 400
-
-    student_name = student['full_name']
-    roll_no = student['roll_no'] if student['roll_no'] else 'N/A'
-    student_dept = student['department'] if student['department'] else (department or 'General Studies')
-    student_class = student['class_name'] if student['class_name'] else (class_name or 'General Class')
-    student_sem = student['semester'] if ('semester' in student.keys() and student['semester']) else ''
-
-    lat_val = float(student_lat)
-    lng_val = float(student_lng)
-    dist_val = round(float(distance), 2)
-
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO attendance (student_id, student_name, roll_no, department, class_name, semester, subject, session_id, date, time, status, latitude, longitude, distance_meters)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Present', ?, ?, ?)
-    ''', (user_id, student_name, roll_no, student_dept, student_class, student_sem, subject, session_id, date_str, time_str, lat_val, lng_val, dist_val))
-    conn.commit()
-    conn.close()
-
-    return jsonify({
-        'success': True,
-        'message': f"Attendance marked as Present for {subject}!",
-        'attendance': {
-            'subject': subject,
-            'session_id': session_id,
-            'date': date_str,
-            'time': time_str,
-            'status': 'Present',
-            'latitude': lat_val,
-            'longitude': lng_val,
-            'distance_meters': dist_val
-        }
-    })
+            'success': True,
+            'message': f"Attendance marked as Present for {subject}!",
+            'attendance': {
+                'subject': subject,
+                'session_id': session_id,
+                'date': date_str,
+                'time': time_str,
+                'status': 'Present',
+                'latitude': lat_val,
+                'longitude': lng_val,
+                'distance_meters': dist_val
+            }
+        })
+    except Exception as outer_err:
+        import traceback
+        app.logger.error(f"[mark_student_attendance uncaught exception]: {traceback.format_exc()}")
+        return jsonify({'error': f"Failed to submit attendance: {str(outer_err)}"}), 400
 
 @app.route('/api/student/attendance', methods=['GET'])
 def get_student_attendance():
