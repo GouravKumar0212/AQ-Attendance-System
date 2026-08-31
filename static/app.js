@@ -1705,7 +1705,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const monthlyRateStr = monthlyRateVal % 1 === 0 ? monthlyRateVal.toFixed(0) + '%' : monthlyRateVal.toFixed(1) + '%';
 
         // Update Total Attended Count
-        if (totalAttendedEl) totalAttendedEl.textContent = countP;
+        if (totalAttendedEl) totalAttendedEl.textContent = yearlyPresent;
 
         // Update Monthly Attendance Badge
         if (monthlyBadgeEl) {

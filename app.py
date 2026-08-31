@@ -472,10 +472,14 @@ def init_db():
                     longitude REAL,
                     distance_meters REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
-                    UNIQUE(student_id, date)
+                    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
                 )
             ''')
+            try:
+                cursor.execute("ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_student_id_date_key")
+                cursor.execute("ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_student_id_date_unique")
+            except Exception:
+                pass
             cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS semester TEXT NOT NULL DEFAULT ''")
             cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS latitude REAL")
             cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS longitude REAL")
@@ -1207,13 +1211,17 @@ def mark_student_attendance():
 
         lat_val = float(student_lat)
         lng_val = float(student_lng)
-        dist_val = round(float(distance), 2) if distance >= 0 else 0.0
+        # Check if student already marked attendance for this session or subject today
+        existing_session = conn.execute('''
+            SELECT id, status, subject, session_id FROM attendance 
+            WHERE student_id = ? AND date = ? AND (session_id = ? OR (subject = ? AND subject != 'Classroom Attendance' AND subject != 'Whole Day Attendance'))
+        ''', (user_id, date_str, session_id, subject)).fetchone()
 
-        if existing_today:
-            existing_status = str(existing_today['status'] or '').strip().lower()
+        if existing_session:
+            existing_status = str(existing_session['status'] or '').strip().lower()
             if existing_status in ['present', 'p']:
                 conn.close()
-                return jsonify({'error': f'Attendance already marked for today ({date_str})! Scanning is limited to once per day.'}), 400
+                return jsonify({'error': f'Attendance already marked for today ({date_str}) for {subject}! Scanning is limited to once per class.'}), 400
             else:
                 # Update existing Absent / Holiday / Leave record to Present
                 cursor = conn.cursor()
@@ -1222,7 +1230,7 @@ def mark_student_attendance():
                         UPDATE attendance 
                         SET status = 'Present', subject = ?, session_id = ?, time = ?, latitude = ?, longitude = ?, distance_meters = ?, department = ?, class_name = ?, semester = ?
                         WHERE id = ?
-                    ''', (subject, session_id, time_str, lat_val, lng_val, dist_val, student_dept, student_class, student_sem, existing_today['id']))
+                    ''', (subject, session_id, time_str, lat_val, lng_val, dist_val, student_dept, student_class, student_sem, existing_session['id']))
                     conn.commit()
                     conn.close()
                     return jsonify({
@@ -1267,12 +1275,16 @@ def mark_student_attendance():
             # If unique constraint violation
             if 'unique' in err_text or 'duplicate' in err_text or '23505' in err_text:
                 conn.close()
-                return jsonify({'error': f'Attendance already marked for today ({date_str})! Scanning is limited to once per day.'}), 400
+                return jsonify({'error': f'Attendance already marked for today ({date_str}) for {subject}! Scanning is limited to once per class.'}), 400
 
             # Schema self-healing if columns missing in PostgreSQL or SQLite
             try:
                 is_pg = getattr(conn, 'is_pg', False)
                 if is_pg:
+                    try:
+                        cursor.execute("ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_student_id_date_key")
+                    except Exception:
+                        pass
                     cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS semester TEXT NOT NULL DEFAULT ''")
                     cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS latitude REAL")
                     cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS longitude REAL")
@@ -1298,7 +1310,7 @@ def mark_student_attendance():
                 conn.close()
                 retry_text = str(retry_err).lower()
                 if 'unique' in retry_text or 'duplicate' in retry_text or '23505' in retry_text:
-                    return jsonify({'error': f'Attendance already marked for today ({date_str})! Scanning is limited to once per day.'}), 400
+                    return jsonify({'error': f'Attendance already marked for today ({date_str}) for {subject}! Scanning is limited to once per class.'}), 400
                 return jsonify({'error': f'Could not record attendance: {str(insert_err)}'}), 400
 
         conn.close()
