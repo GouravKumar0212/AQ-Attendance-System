@@ -633,16 +633,34 @@ Sneha Gupta,,student123,student,Information Technology,B.Tech IT,Semester 3,IT-3
         self.assertEqual(data['staff_count'], 1)
         self.assertEqual(data['skipped_count'], 0)
 
-        # 3. Duplicate username skipping
+        # 3. Existing user re-upload (Smart Upsert)
         res_dup = self.app.post('/api/admin/upload-csv-users', data={
             'file': (io.BytesIO(csv_content.encode('utf-8')), 'users.csv')
         }, content_type='multipart/form-data')
         self.assertEqual(res_dup.status_code, 200)
         data_dup = json.loads(res_dup.data)
         self.assertEqual(data_dup['imported_count'], 0)
-        self.assertEqual(data_dup['skipped_count'], 3)
+        self.assertEqual(data_dup['updated_count'], 3)
+        self.assertEqual(data_dup['skipped_count'], 0)
 
-        # 4. Empty / invalid CSV format handling
+        # 4. Trailing blank lines & username collision resolution
+        csv_with_blanks_and_collision = """full_name,username,password,role,department,class_name,semester,roll_no,email
+Amit Roy,rahul_v01,student123,student,Computer Science,B.Tech CS,Semester 1,CS-999,amit@college.edu
+
+
+"""
+        res_collision = self.app.post('/api/admin/upload-csv-users', data={
+            'file': (io.BytesIO(csv_with_blanks_and_collision.encode('utf-8')), 'users.csv')
+        }, content_type='multipart/form-data')
+        self.assertEqual(res_collision.status_code, 200)
+        data_collision = json.loads(res_collision.data)
+        self.assertEqual(data_collision['imported_count'], 1)
+        self.assertEqual(data_collision['skipped_count'], 0)
+        # Verify assigned username was made unique
+        self.assertNotEqual(data_collision['users'][0]['username'], 'rahul_v01')
+        self.assertTrue('rahul_v01' in data_collision['users'][0]['username'])
+
+        # 5. Empty / invalid CSV format handling
         res_empty = self.app.post('/api/admin/upload-csv-users', data={
             'file': (io.BytesIO(b''), 'empty.csv')
         }, content_type='multipart/form-data')

@@ -468,9 +468,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <span>🎉 Import Completed Successfully!</span>
                                 </div>
                                 <div class="bulk-results-pills">
-                                    <span class="bulk-pill bulk-pill-success">✓ Total Imported: ${data.imported_count}</span>
-                                    <span class="bulk-pill bulk-pill-success">🎓 Students: ${data.student_count}</span>
-                                    <span class="bulk-pill bulk-pill-success">👨‍🏫 Staff: ${data.staff_count}</span>
+                                    <span class="bulk-pill bulk-pill-success">✓ New Imported: ${data.imported_count || 0}</span>
+                                    ${data.updated_count > 0 ? `<span class="bulk-pill" style="background:#EEF2FF; color:#4338CA; border: 1px solid #C7D2FE;">🔄 Updated: ${data.updated_count}</span>` : ''}
+                                    <span class="bulk-pill bulk-pill-success">🎓 Students: ${data.student_count || 0}</span>
+                                    <span class="bulk-pill bulk-pill-success">👨‍🏫 Staff: ${data.staff_count || 0}</span>
                                     ${data.skipped_count > 0 ? `<span class="bulk-pill bulk-pill-warning">⚠️ Skipped: ${data.skipped_count}</span>` : ''}
                                 </div>
                                 ${warningsHtml}

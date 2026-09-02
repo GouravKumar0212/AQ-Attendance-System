@@ -3,6 +3,7 @@ AQ Attendance System - Flask Application Core Server
 Task: Provides REST API endpoints, database ORM wrappers, authentication, attendance marking with TOTP & Geofencing, holiday scheduling, and CSV export.
 """
 
+from totp_engine import create_compact_qr_payload
 import os
 import sqlite3
 import socket
@@ -836,10 +837,9 @@ def download_sample_users_csv():
     # Header row
     writer.writerow(['full_name', 'username', 'password', 'role', 'department', 'class_name', 'semester', 'roll_no', 'email'])
     
-    # Sample rows
-    writer.writerow(['Rahul Sharma', 'rahul_cs01', 'student123', 'student', 'Computer Science', 'B.Tech CS', 'Semester 3', 'CS-2026-01', 'rahul@campus.edu'])
-    writer.writerow(['Priya Patel', 'priya_it02', 'student123', 'student', 'Information Technology', 'B.Tech IT', 'Semester 3', 'IT-2026-02', 'priya@campus.edu'])
-    writer.writerow(['Dr. Alan Turing', 'alan_faculty', 'staff123', 'staff', 'Computer Science', '', '', '', 'alan.turing@campus.edu'])
+    # Clean example rows with non-colliding example placeholders
+    writer.writerow(['Sample Student', 'sample_student_01', 'student123', 'student', 'Computer Science', 'B.Tech CS', 'Semester 1', 'SAMPLE-001', 'sample.student@campus.edu'])
+    writer.writerow(['Sample Faculty', 'sample_staff_01', 'staff123', 'staff', 'Computer Science', '', '', '', 'sample.faculty@campus.edu'])
     
     output.seek(0)
     return Response(
@@ -854,7 +854,7 @@ def download_sample_users_csv():
 @app.route('/api/admin/upload-csv-users', methods=['POST'])
 def bulk_upload_users_csv():
     """
-    Task: Bulk upload student and staff user accounts via CSV file.
+    Task: Bulk upload student and staff user accounts via CSV file with smart Upsert (update existing, insert new).
     """
     if session.get('role') != 'admin':
         return jsonify({'error': 'Unauthorized. Admin access required.'}), 403
@@ -866,42 +866,63 @@ def bulk_upload_users_csv():
     if not file or file.filename == '':
         return jsonify({'error': 'No selected file.'}), 400
 
-    if not (file.filename.lower().endswith('.csv') or file.content_type in ['text/csv', 'application/vnd.ms-excel', 'text/plain']):
+    if not (file.filename.lower().endswith('.csv') or file.content_type in ['text/csv', 'application/vnd.ms-excel', 'text/plain', 'application/octet-stream']):
         return jsonify({'error': 'Invalid file format. Please upload a .csv file.'}), 400
 
+    # 1. Tolerant decoding with fallback encodings
+    raw_bytes = file.stream.read()
+    content = None
+    for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
+        try:
+            content = raw_bytes.decode(enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if content is None:
+        return jsonify({'error': 'Failed to decode CSV file. Please ensure it is saved with standard UTF-8 or ANSI encoding.'}), 400
+
+    # 2. Tolerant delimiter detection (comma, semicolon, tab)
+    stream = io.StringIO(content, newline=None)
+    first_line = stream.readline()
+    stream.seek(0)
+    delimiter = ','
+    if ';' in first_line and first_line.count(';') > first_line.count(','):
+        delimiter = ';'
+    elif '\t' in first_line and first_line.count('\t') > first_line.count(','):
+        delimiter = '\t'
+
     try:
-        content = file.stream.read().decode("utf-8-sig")
-        stream = io.StringIO(content, newline=None)
-        reader = csv.DictReader(stream)
+        reader = csv.DictReader(stream, delimiter=delimiter)
     except Exception as e:
         return jsonify({'error': f'Failed to parse CSV file: {str(e)}'}), 400
 
     if not reader.fieldnames:
         return jsonify({'error': 'CSV file is empty or missing header row.'}), 400
 
-    # Normalize header mapping (strip whitespace and lower-case keys)
+    # 3. Robust header mapping (strip whitespace, symbols, lower-case)
+    import re
     header_map = {}
     for fn in reader.fieldnames:
         if not fn:
             continue
-        clean_fn = fn.strip().lower()
-        if clean_fn in ['full_name', 'fullname', 'name', 'student_name', 'staff_name', 'student name', 'staff name']:
+        clean_fn = re.sub(r'[^a-z0-9]', '', str(fn).lower())
+        if clean_fn in ['fullname', 'name', 'studentname', 'staffname', 'candidatename', 'nameofstudent', 'facultyname']:
             header_map['full_name'] = fn
-        elif clean_fn in ['username', 'user_name', 'user', 'login', 'user name']:
+        elif clean_fn in ['username', 'user', 'login', 'userid', 'loginid']:
             header_map['username'] = fn
-        elif clean_fn in ['password', 'pwd', 'pass']:
+        elif clean_fn in ['password', 'pwd', 'pass', 'passcode']:
             header_map['password'] = fn
-        elif clean_fn in ['role', 'user_role', 'type', 'account_type', 'user role']:
+        elif clean_fn in ['role', 'userrole', 'type', 'accounttype', 'category']:
             header_map['role'] = fn
-        elif clean_fn in ['department', 'dept', 'branch']:
+        elif clean_fn in ['department', 'dept', 'branch', 'stream', 'deptname']:
             header_map['department'] = fn
-        elif clean_fn in ['class_name', 'class', 'course', 'degree', 'class name']:
+        elif clean_fn in ['classname', 'class', 'course', 'degree', 'programme', 'program', 'batch']:
             header_map['class_name'] = fn
-        elif clean_fn in ['semester', 'sem']:
+        elif clean_fn in ['semester', 'sem', 'term', 'year', 'semno']:
             header_map['semester'] = fn
-        elif clean_fn in ['roll_no', 'rollno', 'roll_number', 'roll', 'enrollment_no', 'roll no', 'roll number']:
+        elif clean_fn in ['rollno', 'rollnumber', 'roll', 'enrollmentno', 'enrollment', 'registrationno', 'regno', 'urn', 'prn', 'admissionno', 'admno']:
             header_map['roll_no'] = fn
-        elif clean_fn in ['email', 'email_address', 'mail', 'email address']:
+        elif clean_fn in ['email', 'emailaddress', 'mail', 'emailid', 'mailid']:
             header_map['email'] = fn
 
     if 'full_name' not in header_map:
@@ -910,96 +931,202 @@ def bulk_upload_users_csv():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Preload existing usernames and roll numbers to prevent collisions
-    existing_users = {row['username'].lower() for row in conn.execute('SELECT username FROM users').fetchall()}
-    existing_rolls = {row['roll_no'].lower() for row in conn.execute("SELECT roll_no FROM users WHERE roll_no IS NOT NULL AND roll_no != ''").fetchall()}
+    # Preload existing users indexed by lowercase username, lowercase roll_no, and lowercase email
+    existing_records = conn.execute("SELECT id, username, roll_no, email, role, full_name, class_name, semester FROM users").fetchall()
+    
+    user_by_roll = {}
+    user_by_username = {}
+    user_by_email = {}
+    existing_usernames_set = set()
+
+    for u in existing_records:
+        uname = (u['username'] or '').strip().lower()
+        if uname:
+            user_by_username[uname] = u
+            existing_usernames_set.add(uname)
+        r_no = (u['roll_no'] or '').strip().lower()
+        if r_no:
+            user_by_roll[r_no] = u
+        em = (u['email'] or '').strip().lower()
+        if em:
+            user_by_email[em] = u
 
     imported_count = 0
+    updated_count = 0
     student_count = 0
     staff_count = 0
     skipped_count = 0
     warnings = []
-    created_users = []
+    processed_users = []
 
     row_idx = 1
     for row in reader:
         row_idx += 1
+
+        # Check if entire row is empty / whitespace (standard Excel export artifact)
+        if not any(v and str(v).strip() for v in row.values()):
+            continue  # Silently ignore blank line without incrementing skipped_count
+
         raw_full_name = row.get(header_map.get('full_name', ''), '').strip()
         if not raw_full_name:
+            # Row has some data but lacks full_name
             skipped_count += 1
-            warnings.append(f"Row {row_idx}: Skipped due to empty full name.")
+            warnings.append(f"Row {row_idx}: Skipped due to missing full name.")
             continue
 
         raw_role = row.get(header_map.get('role', ''), 'student').strip().lower()
         if raw_role not in ['student', 'staff']:
             raw_role = 'student'
 
-        raw_dept = row.get(header_map.get('department', ''), 'Computer Science').strip()
+        raw_dept = row.get(header_map.get('department', ''), 'Computer Science').strip() or 'Computer Science'
         raw_class = row.get(header_map.get('class_name', ''), '').strip()
         raw_sem = row.get(header_map.get('semester', ''), '').strip()
         raw_roll = row.get(header_map.get('roll_no', ''), '').strip()
         raw_email = row.get(header_map.get('email', ''), '').strip()
+        raw_username = row.get(header_map.get('username', ''), '').strip()
+        raw_password = row.get(header_map.get('password', ''), '').strip()
 
-        # Check duplicate roll number for students
-        if raw_role == 'student' and raw_roll and raw_roll.lower() in existing_rolls:
-            skipped_count += 1
-            warnings.append(f"Row {row_idx} ({raw_full_name}): Roll number '{raw_roll}' already exists (Skipped).")
+        # Decide default password if not provided
+        if raw_password and len(raw_password) >= 3:
+            pass_to_hash = raw_password
+        else:
+            pass_to_hash = 'student123' if raw_role == 'student' else 'staff123'
+        pass_hash = generate_password_hash(pass_to_hash)
+
+        # 4. Check if this is an EXISTING user to UPDATE (UPSERT)
+        target_user = None
+
+        # Priority 1: Match student by roll_no
+        if raw_role == 'student' and raw_roll and raw_roll.lower() in user_by_roll:
+            target_user = user_by_roll[raw_roll.lower()]
+
+        # Priority 2: Match by username
+        if not target_user and raw_username and raw_username.lower() in user_by_username:
+            matched_user = user_by_username[raw_username.lower()]
+            if raw_role == 'student':
+                if not raw_roll or not matched_user['roll_no'] or raw_roll.lower() == matched_user['roll_no'].lower():
+                    target_user = matched_user
+            else:
+                target_user = matched_user
+
+        # Priority 3: Match staff by email
+        if not target_user and raw_role == 'staff' and raw_email and raw_email.lower() in user_by_email:
+            target_user = user_by_email[raw_email.lower()]
+
+        if target_user:
+            # === UPDATE EXISTING USER RECORD ===
+            try:
+                target_id = target_user['id']
+                # Determine new username: keep current if new requested is taken by someone else
+                new_username = target_user['username']
+                if raw_username and raw_username.lower() != target_user['username'].lower():
+                    if raw_username.lower() not in existing_usernames_set:
+                        existing_usernames_set.discard(target_user['username'].lower())
+                        existing_usernames_set.add(raw_username.lower())
+                        new_username = raw_username
+
+                # Update database record
+                final_email = raw_email if raw_email else target_user['email']
+                final_class = raw_class if raw_class else target_user['class_name']
+                final_sem = raw_sem if raw_sem else target_user['semester']
+                final_roll = raw_roll if raw_roll else target_user['roll_no']
+
+                if raw_password:  # Only overwrite password if explicitly given in CSV
+                    cursor.execute('''
+                        UPDATE users 
+                        SET full_name = ?, username = ?, password_hash = ?, role = ?, department = ?, email = ?, class_name = ?, semester = ?, roll_no = ?
+                        WHERE id = ?
+                    ''', (raw_full_name, new_username, pass_hash, raw_role, raw_dept, final_email, final_class, final_sem, final_roll, target_id))
+                else:
+                    cursor.execute('''
+                        UPDATE users 
+                        SET full_name = ?, username = ?, role = ?, department = ?, email = ?, class_name = ?, semester = ?, roll_no = ?
+                        WHERE id = ?
+                    ''', (raw_full_name, new_username, raw_role, raw_dept, final_email, final_class, final_sem, final_roll, target_id))
+
+                # Update memory indexes
+                updated_record = {'id': target_id, 'username': new_username, 'roll_no': final_roll, 'email': final_email, 'role': raw_role, 'full_name': raw_full_name, 'class_name': final_class, 'semester': final_sem}
+                if final_roll:
+                    user_by_roll[final_roll.lower()] = updated_record
+                if final_email:
+                    user_by_email[final_email.lower()] = updated_record
+
+                updated_count += 1
+                if raw_role == 'student':
+                    student_count += 1
+                else:
+                    staff_count += 1
+
+                processed_users.append({
+                    'action': 'updated',
+                    'full_name': raw_full_name,
+                    'username': new_username,
+                    'role': raw_role,
+                    'department': raw_dept,
+                    'class_name': final_class,
+                    'semester': final_sem,
+                    'roll_no': final_roll
+                })
+                warnings.append(f"Row {row_idx} ({raw_full_name}): Updated existing {raw_role} account{' (Roll: ' + final_roll + ')' if final_roll else ''}.")
+            except Exception as update_err:
+                skipped_count += 1
+                warnings.append(f"Row {row_idx} ({raw_full_name}): Update failed ({str(update_err)}).")
             continue
 
-        # Generate or extract username
-        raw_username = row.get(header_map.get('username', ''), '').strip()
+        # === INSERT NEW USER RECORD ===
+        # 5. Resolve username: ensure uniqueness without skipping
         if not raw_username:
             if raw_roll:
                 base_username = raw_roll.lower().replace(' ', '_').replace('-', '_')
             else:
                 base_username = raw_full_name.lower().replace(' ', '_').replace('.', '')
-            
-            # Clean non-alphanumeric chars
             base_username = ''.join(c for c in base_username if c.isalnum() or c in ['_', '-'])[:30]
             if len(base_username) < 3:
                 base_username = f"user_{int(time.time() * 1000) % 100000}"
-            
-            if base_username.lower() in existing_users:
-                skipped_count += 1
-                warnings.append(f"Row {row_idx} ({raw_full_name}): Username '{base_username}' already exists (Skipped).")
-                continue
             raw_username = base_username
-        
-        if len(raw_username) < 3 or len(raw_username) > 50:
-            skipped_count += 1
-            warnings.append(f"Row {row_idx} ({raw_full_name}): Username '{raw_username}' length must be 3-50 chars.")
-            continue
 
-        if raw_username.lower() in existing_users:
-            skipped_count += 1
-            warnings.append(f"Row {row_idx} ({raw_full_name}): Username '{raw_username}' already exists (Skipped).")
-            continue
+        # If requested username already in use, auto-assign a unique suffix
+        final_username = raw_username
+        if final_username.lower() in existing_usernames_set:
+            if raw_roll:
+                candidate = f"{raw_username}_{raw_roll.lower().replace('-', '_').replace(' ', '_')}"
+            else:
+                candidate = f"{raw_username}_1"
+            counter = 1
+            while candidate.lower() in existing_usernames_set:
+                candidate = f"{raw_username}_{counter}"
+                counter += 1
+            warnings.append(f"Row {row_idx} ({raw_full_name}): Username '{raw_username}' already taken; assigned '{candidate}'.")
+            final_username = candidate
 
-        # Extract or generate password
-        raw_password = row.get(header_map.get('password', ''), '').strip()
-        if not raw_password or len(raw_password) < 6:
-            raw_password = 'student123' if raw_role == 'student' else 'staff123'
-
-        pass_hash = generate_password_hash(raw_password)
+        # Validate length
+        if len(final_username) < 3:
+            final_username = f"{final_username}_{int(time.time() * 1000) % 10000}"
 
         try:
             cursor.execute('''
                 INSERT INTO users (username, password_hash, full_name, role, department, email, class_name, semester, roll_no)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (raw_username, pass_hash, raw_full_name, raw_role, raw_dept, raw_email, raw_class, raw_sem, raw_roll))
-            
-            existing_users.add(raw_username.lower())
+            ''', (final_username, pass_hash, raw_full_name, raw_role, raw_dept, raw_email, raw_class, raw_sem, raw_roll))
+
+            existing_usernames_set.add(final_username.lower())
+            new_record = {'id': cursor.lastrowid, 'username': final_username, 'roll_no': raw_roll, 'email': raw_email, 'role': raw_role, 'full_name': raw_full_name, 'class_name': raw_class, 'semester': raw_sem}
+            user_by_username[final_username.lower()] = new_record
             if raw_roll:
-                existing_rolls.add(raw_roll.lower())
+                user_by_roll[raw_roll.lower()] = new_record
+            if raw_email:
+                user_by_email[raw_email.lower()] = new_record
+
             imported_count += 1
             if raw_role == 'student':
                 student_count += 1
             else:
                 staff_count += 1
-            
-            created_users.append({
+
+            processed_users.append({
+                'action': 'inserted',
                 'full_name': raw_full_name,
-                'username': raw_username,
+                'username': final_username,
                 'role': raw_role,
                 'department': raw_dept,
                 'class_name': raw_class,
@@ -1013,7 +1140,16 @@ def bulk_upload_users_csv():
     conn.commit()
     conn.close()
 
-    summary_msg = f"Imported {imported_count} user{'s' if imported_count != 1 else ''} ({student_count} student{'s' if student_count != 1 else ''}, {staff_count} staff)."
+    # Friendly summary message
+    parts = []
+    if imported_count > 0:
+        parts.append(f"Imported {imported_count} new user{'s' if imported_count != 1 else ''}")
+    if updated_count > 0:
+        parts.append(f"Updated {updated_count} existing user{'s' if updated_count != 1 else ''}")
+    if not parts:
+        parts.append("Processed 0 users")
+
+    summary_msg = f"{', '.join(parts)} ({student_count} student{'s' if student_count != 1 else ''}, {staff_count} staff)."
     if skipped_count > 0:
         summary_msg += f" {skipped_count} row{'s' if skipped_count != 1 else ''} skipped."
 
@@ -1021,11 +1157,12 @@ def bulk_upload_users_csv():
         'success': True,
         'message': summary_msg,
         'imported_count': imported_count,
+        'updated_count': updated_count,
         'student_count': student_count,
         'staff_count': staff_count,
         'skipped_count': skipped_count,
         'warnings': warnings[:50],
-        'users': created_users[:50]
+        'users': processed_users[:50]
     })
 
 @app.route('/api/staff/students', methods=['GET'])
