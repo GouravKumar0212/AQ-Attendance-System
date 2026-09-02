@@ -996,22 +996,33 @@ def bulk_upload_users_csv():
         # 4. Check if this is an EXISTING user to UPDATE (UPSERT)
         target_user = None
 
-        # Priority 1: Match student by roll_no
-        if raw_role == 'student' and raw_roll and raw_roll.lower() in user_by_roll:
-            target_user = user_by_roll[raw_roll.lower()]
-
-        # Priority 2: Match by username
-        if not target_user and raw_username and raw_username.lower() in user_by_username:
+        # Priority 1: Match existing user by username if name or email matches
+        if raw_username and raw_username.lower() in user_by_username:
             matched_user = user_by_username[raw_username.lower()]
-            if raw_role == 'student':
-                if not raw_roll or not matched_user['roll_no'] or raw_roll.lower() == matched_user['roll_no'].lower():
-                    target_user = matched_user
-            else:
+            name_matches = (
+                matched_user['full_name'].strip().lower() == raw_full_name.strip().lower() or
+                matched_user['full_name'].strip().lower().split()[0] == raw_full_name.strip().lower().split()[0]
+            )
+            email_matches = bool(raw_email and matched_user['email'] and raw_email.strip().lower() == matched_user['email'].strip().lower())
+            if matched_user['role'] == raw_role and (name_matches or email_matches):
                 target_user = matched_user
+
+        # Priority 2: Match student by roll_no AND matching name or email
+        if not target_user and raw_role == 'student' and raw_roll and raw_roll.lower() in user_by_roll:
+            existing_candidate = user_by_roll[raw_roll.lower()]
+            name_matches = (
+                existing_candidate['full_name'].strip().lower() == raw_full_name.strip().lower() or
+                existing_candidate['full_name'].strip().lower().split()[0] == raw_full_name.strip().lower().split()[0]
+            )
+            email_matches = bool(raw_email and existing_candidate['email'] and raw_email.strip().lower() == existing_candidate['email'].strip().lower())
+            if name_matches or email_matches:
+                target_user = existing_candidate
 
         # Priority 3: Match staff by email
         if not target_user and raw_role == 'staff' and raw_email and raw_email.lower() in user_by_email:
-            target_user = user_by_email[raw_email.lower()]
+            matched_staff = user_by_email[raw_email.lower()]
+            if matched_staff['role'] == 'staff':
+                target_user = matched_staff
 
         if target_user:
             # === UPDATE EXISTING USER RECORD ===
