@@ -1792,10 +1792,11 @@ document.addEventListener('DOMContentLoaded', () => {
             yearlyBadgeEl.style.color = yearlyRateVal >= 75 ? '#10B981' : (yearlyRateVal >= 45 ? '#F59E0B' : '#EF4444');
         }
 
-        // Determine Effective Rate for Eligibility Status & Shortage Alert
-        const effectiveRate = monthlyWorking > 0 ? monthlyRateVal : yearlyRateVal;
-        const effectiveRateStr = monthlyWorking > 0 ? monthlyRateStr : yearlyRateStr;
-        const isShortage = (monthlyWorking > 0 && monthlyRateVal < 45.0) || (yearlyWorking > 0 && yearlyRateVal < 45.0);
+        // Determine Effective Rate for Eligibility Status & Shortage Alert (Overall Cumulative Standing)
+        const hasYearlyData = yearlyWorking > 0;
+        const effectiveRate = hasYearlyData ? yearlyRateVal : (monthlyWorking > 0 ? monthlyRateVal : 100);
+        const effectiveRateStr = hasYearlyData ? yearlyRateStr : (monthlyWorking > 0 ? monthlyRateStr : '100%');
+        const isShortage = effectiveRate < 45.0 && ((hasYearlyData && yearlyWorking >= 3) || monthlyWorking >= 5);
 
         const updateStatusRatingUI = (htmlContent) => {
             if (statusRatingEl) statusRatingEl.innerHTML = htmlContent;

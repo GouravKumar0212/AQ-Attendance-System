@@ -481,6 +481,8 @@ def init_db():
             try:
                 cursor.execute("ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_student_id_date_key")
                 cursor.execute("ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_student_id_date_unique")
+                cursor.execute("ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_student_id_session_id_key")
+                cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS attendance_student_id_session_date_idx ON attendance (student_id, session_id, date)")
             except Exception:
                 pass
             cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS semester TEXT NOT NULL DEFAULT ''")
