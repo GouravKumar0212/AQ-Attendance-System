@@ -1017,13 +1017,24 @@ def bulk_upload_users_csv():
             # === UPDATE EXISTING USER RECORD ===
             try:
                 target_id = target_user['id']
-                # Determine new username: keep current if new requested is taken by someone else
+                # Determine new username: keep current or assign unique matching username
                 new_username = target_user['username']
                 if raw_username and raw_username.lower() != target_user['username'].lower():
                     if raw_username.lower() not in existing_usernames_set:
                         existing_usernames_set.discard(target_user['username'].lower())
                         existing_usernames_set.add(raw_username.lower())
                         new_username = raw_username
+                    else:
+                        if not target_user['username'].lower().startswith(raw_username.lower()):
+                            candidate = f"{raw_username}_{final_roll.lower().replace('-', '_').replace(' ', '_')}" if final_roll else f"{raw_username}_1"
+                            counter = 1
+                            while candidate.lower() in existing_usernames_set:
+                                candidate = f"{raw_username}_{counter}"
+                                counter += 1
+                            existing_usernames_set.discard(target_user['username'].lower())
+                            existing_usernames_set.add(candidate.lower())
+                            new_username = candidate
+                            warnings.append(f"Row {row_idx} ({raw_full_name}): Username '{raw_username}' was taken; assigned '{candidate}'.")
 
                 # Update database record
                 final_email = raw_email if raw_email else target_user['email']
