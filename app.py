@@ -151,6 +151,9 @@ def apply_security_headers(response):
 
     response.headers.pop('Server', None)
     response.headers['X-Powered-By'] = 'AQ-SecureEngine/2026'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
 
     return response
 

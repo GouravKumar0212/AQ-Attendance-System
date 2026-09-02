@@ -1587,8 +1587,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Filter records for table
             let filteredRecords = studentAllRecords;
-            if (monthFilterVal) {
-                filteredRecords = studentAllRecords.filter(r => r.date && r.date.startsWith(monthFilterVal));
+            if (monthFilterVal && monthFilterVal !== 'all') {
+                filteredRecords = studentAllRecords.filter(r => r.date && (r.date.includes(`-${monthFilterVal}-`) || (r.date.split('-')[1] === monthFilterVal)));
             }
             renderStudentAttendanceRecords(filteredRecords);
 
