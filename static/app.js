@@ -876,64 +876,102 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Continuous Geolocation Pre-warming in background for zero-latency instant attendance submission
+    // Continuous Geolocation Pre-warming in background for zero-latency instant attendance submission.
+    // We keep the SINGLE BEST (lowest-accuracy-number = most precise) fix seen so far, not just the
+    // latest one - a phone's GPS fix quality genuinely varies fix-to-fix (multipath indoors, cold start,
+    // etc), so "most recent" and "most accurate" are not the same thing.
     const startLocationWatcher = () => {
         if (!navigator.geolocation || locationWatchId !== null) return;
         try {
             locationWatchId = navigator.geolocation.watchPosition(
                 (pos) => {
-                    cachedStudentLocation = {
+                    const fix = {
                         lat: pos.coords.latitude,
                         lng: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy,
                         timestamp: Date.now()
                     };
+                    if (!cachedStudentLocation ||
+                        (Date.now() - cachedStudentLocation.timestamp > 20000) ||
+                        (typeof fix.accuracy === 'number' && fix.accuracy < cachedStudentLocation.accuracy)) {
+                        cachedStudentLocation = fix;
+                    }
                 },
                 (err) => {
                     console.warn('GPS pre-warming background fix:', err);
                 },
-                { enableHighAccuracy: true, maximumAge: 15000, timeout: 12000 }
+                // enableHighAccuracy asks the device to use GPS (not just WiFi/cell), maximumAge:0
+                // forces a fresh fix each callback instead of the browser silently reusing a stale one.
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
             );
         } catch (e) {
             console.warn('Location watcher start error:', e);
         }
     };
 
+    // Only trust a fix this precise (meters) or better for an 800m geofence. Anything worse is a
+    // sign the device fell back to WiFi/cell-tower positioning (common indoors) and the raw
+    // coordinates cannot be trusted - the backend independently double-checks this too.
+    const MIN_USABLE_ACCURACY_METERS = 300;
+    // If we don't get anything below MIN_USABLE_ACCURACY_METERS within this budget, just go with
+    // the best fix we've seen rather than blocking the student indefinitely; the backend will still
+    // reject it with a clear message if it's genuinely too imprecise.
+    const LOCATION_SAMPLE_WINDOW_MS = 6000;
+
     const getCurrentLocation = () => {
         return new Promise((resolve, reject) => {
-            // If we already have a warm GPS fix from last 30s, resolve in 0ms!
-            if (cachedStudentLocation && (Date.now() - cachedStudentLocation.timestamp < 30000)) {
-                return resolve({ lat: cachedStudentLocation.lat, lng: cachedStudentLocation.lng });
+            // If we already have a warm, sufficiently accurate GPS fix from the last 20s, use it instantly.
+            if (cachedStudentLocation &&
+                (Date.now() - cachedStudentLocation.timestamp < 20000) &&
+                typeof cachedStudentLocation.accuracy === 'number' &&
+                cachedStudentLocation.accuracy <= MIN_USABLE_ACCURACY_METERS) {
+                return resolve({ lat: cachedStudentLocation.lat, lng: cachedStudentLocation.lng, accuracy: cachedStudentLocation.accuracy });
             }
             if (!navigator.geolocation) {
                 reject(new Error('Geolocation is not supported by this browser.'));
                 return;
             }
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    cachedStudentLocation = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        timestamp: Date.now()
-                    };
-                    resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
+
+            let best = (cachedStudentLocation && (Date.now() - cachedStudentLocation.timestamp < 20000)) ? cachedStudentLocation : null;
+            let settled = false;
+            const finish = (fix, err) => {
+                if (settled) return;
+                settled = true;
+                try { navigator.geolocation.clearWatch(sampleWatchId); } catch (e) { }
+                if (fix) {
+                    cachedStudentLocation = fix;
+                    resolve({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
+                } else {
+                    reject(err || new Error('Could not get a GPS fix. Please make sure location is enabled and try again.'));
+                }
+            };
+
+            // Sample real GPS fixes for a short window and keep only the most accurate one, instead
+            // of trusting whichever fix happens to arrive first (which is what caused unreliable
+            // "you're 1.8km away" errors on-campus).
+            const sampleWatchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const fix = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy, timestamp: Date.now() };
+                    if (!best || (typeof fix.accuracy === 'number' && fix.accuracy < best.accuracy)) {
+                        best = fix;
+                    }
+                    // Good enough - no need to keep waiting.
+                    if (typeof fix.accuracy === 'number' && fix.accuracy <= 50) {
+                        finish(best);
+                    }
                 },
-                (highAccErr) => {
-                    console.warn('High accuracy location fallback:', highAccErr);
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            cachedStudentLocation = {
-                                lat: position.coords.latitude,
-                                lng: position.coords.longitude,
-                                timestamp: Date.now()
-                            };
-                            resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
-                        },
-                        (lowAccErr) => reject(highAccErr || lowAccErr),
-                        { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
-                    );
+                (err) => {
+                    console.warn('GPS sampling error:', err);
+                    // Deliberately NOT falling back to enableHighAccuracy:false here - that switches
+                    // to WiFi/cell-tower based positioning, which is what produced multi-km errors
+                    // indoors in the first place. If we have any best-so-far fix, use it; otherwise
+                    // let the window run out and report the real error.
+                    if (best) finish(best);
                 },
-                { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+                { enableHighAccuracy: true, maximumAge: 0, timeout: LOCATION_SAMPLE_WINDOW_MS }
             );
+
+            setTimeout(() => finish(best, best ? null : new Error('Location signal too weak. Please move to an open area and try again.')), LOCATION_SAMPLE_WINDOW_MS);
         });
     };
 
@@ -1377,12 +1415,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            const handleScanFailure = (errorMessage) => {
+                isScanLocked = false;
+                if (qrPayloadInput) qrPayloadInput.value = '';
+                if (scannerReticle) {
+                    scannerReticle.classList.remove('reticle-locked');
+                }
+                showToast(errorMessage, 'error');
+                if (qrScanStatusMsg) {
+                    qrScanStatusMsg.innerHTML = `<span style="color: #EF4444; font-weight: 700;">⚠️ ${escapeHtml(errorMessage)}</span><br><button type="button" class="btn btn-sm btn-secondary" style="margin-top: 0.5rem; padding: 0.35rem 0.85rem; font-size: 0.85rem; font-weight: 700; border-radius: 6px;" id="retryScanBtnNow">🔄 Tap to Scan Again</button>`;
+                    const retryBtn = document.getElementById('retryScanBtnNow');
+                    if (retryBtn) {
+                        retryBtn.addEventListener('click', (ev) => {
+                            ev.preventDefault();
+                            isScanLocked = false;
+                            startCameraScan();
+                        });
+                    }
+                }
+                // Automatically re-arm camera after a brief delay so student can scan again seamlessly
+                setTimeout(() => {
+                    if (scanQrModal && !scanQrModal.classList.contains('hidden') && !isScanLocked) {
+                        startCameraScan();
+                    }
+                }, 2200);
+            };
+
             // --- Geolocation capture (uses instant pre-warmed GPS coordinates) ---
             if (qrScanStatusMsg) qrScanStatusMsg.textContent = '📍 Verifying campus location…';
             try {
                 const coords = await getCurrentLocation();
                 payloadObj.lat = coords.lat;
                 payloadObj.lng = coords.lng;
+                payloadObj.accuracy = coords.accuracy;
             } catch (locErr) {
                 let msg = 'Location access is required to mark attendance. Please enable location and try again.';
                 if (locErr && locErr.code === 1) {
@@ -1390,8 +1455,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (locErr && (locErr.code === 2 || locErr.code === 3 || locErr.code === 8)) {
                     msg = 'Could not get your location in time. Please try again with GPS/location services turned on.';
                 }
-                showToast(msg, 'error');
-                if (qrScanStatusMsg) qrScanStatusMsg.textContent = '⚠️ ' + msg;
+                handleScanFailure(msg);
                 return;
             }
 
@@ -1404,8 +1468,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await res.json();
 
                 if (!res.ok) {
-                    showToast(data.error || 'Failed to mark attendance.', 'error');
-                    if (qrScanStatusMsg) qrScanStatusMsg.textContent = '⚠️ ' + (data.error || 'Attendance rejected');
+                    handleScanFailure(data.error || 'Failed to mark attendance.');
                     return;
                 }
 
@@ -1413,7 +1476,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 closeScanQrModal();
                 fetchStudentAttendance();
             } catch (err) {
-                showToast('Network error marking attendance.', 'error');
+                handleScanFailure('Network error marking attendance. Please check your connection and try again.');
             }
         });
     }
@@ -1626,10 +1689,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     statusType = 'L'; // Weekend / Off
                     boxClass += ' day-leave';
                     countL++;
-                } else {
-                    statusType = 'A'; // Absent on weekday
+                } else if (dateKey < todayStr) {
+                    statusType = 'A'; // Past weekday with no attendance record
                     boxClass += ' day-absent';
                     countA++;
+                } else {
+                    // Today and attendance not yet marked: pending scan
+                    // Do NOT count as Absent or increase absent/present counters
+                    statusType = 'PENDING';
                 }
             }
 
@@ -1646,6 +1713,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (statusType === 'H') {
                 const hTitle = holidayObj ? holidayObj.title : 'College Holiday';
                 badgeHtml = `<div class="cal-badge cal-badge-h" title="Holiday: ${escapeHtml(hTitle)}">H</div>`;
+            } else if (statusType === 'PENDING') {
+                badgeHtml = `<div class="cal-badge" style="background: rgba(37, 99, 235, 0.12); color: #2563EB; border: 1.5px dashed #2563EB; font-size: 0.72rem; font-weight: 800;" title="Today: Scan QR Code to mark attendance">⏳</div>`;
             }
 
             gridHtml += `
@@ -1685,13 +1754,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const yearlyBadgeEl = document.getElementById('studentYearlyPctBadge');
         const legacyPctBadge = document.getElementById('studentAttendancePctBadge');
         const statusRatingEl = document.getElementById('studentAttendanceStatusRating');
+        const studentStatusRatingCard = document.getElementById('studentStatusRating');
 
         // 1. Calculate Yearly / Overall Attendance across ALL logged student records
         let yearlyPresent = 0;
         let yearlyAbsent = 0;
         (studentAllRecords || []).forEach(r => {
-            const st = (r.status || '').toLowerCase();
-            if (st.includes('pres') || st === 'p') yearlyPresent++;
+            const st = (r.status || '').trim().toLowerCase();
+            if (st === 'present' || st === 'p' || st.startsWith('pres')) yearlyPresent++;
             else if (st.includes('abs') || st === 'a') yearlyAbsent++;
         });
 
@@ -1704,7 +1774,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const monthlyRateVal = monthlyWorking > 0 ? (countP / monthlyWorking) * 100 : 0;
         const monthlyRateStr = monthlyRateVal % 1 === 0 ? monthlyRateVal.toFixed(0) + '%' : monthlyRateVal.toFixed(1) + '%';
 
-        // Update Total Attended Count
+        // Update Total Attended Count (Strictly matches verified Present attendance records)
         if (totalAttendedEl) totalAttendedEl.textContent = yearlyPresent;
 
         // Update Monthly Attendance Badge
@@ -1727,14 +1797,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const effectiveRateStr = monthlyWorking > 0 ? monthlyRateStr : yearlyRateStr;
         const isShortage = (monthlyWorking > 0 && monthlyRateVal < 45.0) || (yearlyWorking > 0 && yearlyRateVal < 45.0);
 
-        if (statusRatingEl) {
-            if (isShortage) {
-                statusRatingEl.innerHTML = '<span style="color: #EF4444;">🚨 Shortage (&lt;45%)</span>';
-            } else if (effectiveRate >= 75) {
-                statusRatingEl.innerHTML = '<span style="color: #10B981;">🟢 Good</span>';
-            } else {
-                statusRatingEl.innerHTML = '<span style="color: #F59E0B;">🟡 Warning</span>';
-            }
+        const updateStatusRatingUI = (htmlContent) => {
+            if (statusRatingEl) statusRatingEl.innerHTML = htmlContent;
+            if (studentStatusRatingCard) studentStatusRatingCard.innerHTML = htmlContent;
+        };
+
+        if (isShortage) {
+            updateStatusRatingUI('<span style="color: #EF4444;">🚨 Shortage (&lt;45%)</span>');
+        } else if (effectiveRate >= 75) {
+            updateStatusRatingUI('<span style="color: #10B981;">🟢 Good</span>');
+        } else {
+            updateStatusRatingUI('<span style="color: #F59E0B;">🟡 Warning</span>');
         }
 
         // Student Low Attendance Warning Alert (< 45%)
@@ -1809,11 +1882,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalCountEl = document.getElementById('studentTotalAttendedCount');
         const pctBadge = document.getElementById('studentAttendancePctBadge');
 
-        const presentCount = records.filter(r => (r.status || 'Present').toLowerCase().includes('pres')).length;
+        const presentCount = records.filter(r => {
+            const st = (r.status || '').trim().toLowerCase();
+            return st === 'present' || st === 'p' || st.startsWith('pres');
+        }).length;
         if (totalCountEl) totalCountEl.textContent = presentCount;
 
         if (pctBadge) {
-            const rate = records.length > 0 ? Math.round((presentCount / records.length) * 100) : 100;
+            const rate = records.length > 0 ? Math.round((presentCount / records.length) * 100) : 0;
             pctBadge.textContent = `${rate}%`;
         }
 

@@ -1,0 +1,11 @@
+.env
+.env.*
+.env.local
+venv/
+env/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+test_app.py
+test_permanent_qr.py

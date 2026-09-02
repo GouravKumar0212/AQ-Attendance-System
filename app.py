@@ -16,7 +16,7 @@ from collections import defaultdict
 from flask import Flask, render_template, request, jsonify, session, send_from_directory, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from totp_engine import create_totp_payload, verify_totp_payload, get_seconds_remaining
-from geofence import is_within_campus
+from geofence import is_within_campus, MAX_ACCEPTABLE_ACCURACY_METERS
 
 try:
     from dotenv import load_dotenv
@@ -484,6 +484,7 @@ def init_db():
             cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS latitude REAL")
             cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS longitude REAL")
             cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS distance_meters REAL")
+            cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS accuracy_meters REAL")
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS holidays (
@@ -554,6 +555,8 @@ def init_db():
                 cursor.execute("ALTER TABLE attendance ADD COLUMN longitude REAL")
             if 'distance_meters' not in att_cols:
                 cursor.execute("ALTER TABLE attendance ADD COLUMN distance_meters REAL")
+            if 'accuracy_meters' not in att_cols:
+                cursor.execute("ALTER TABLE attendance ADD COLUMN accuracy_meters REAL")
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS holidays (
@@ -1146,6 +1149,7 @@ def mark_student_attendance():
         # --- Geolocation Verification ---
         student_lat = data.get('lat')
         student_lng = data.get('lng')
+        student_accuracy = data.get('accuracy')
 
         if app.config.get('TESTING') and (student_lat is None or student_lng is None):
             student_lat = 24.495374689123384
@@ -1164,7 +1168,25 @@ def mark_student_attendance():
         except (ValueError, TypeError):
             return jsonify({'error': 'Invalid coordinate numbers.'}), 400
 
-        inside_campus, distance = is_within_campus(student_lat, student_lng)
+        accuracy_f = None
+        if student_accuracy is not None and str(student_accuracy).strip() != '':
+            try:
+                accuracy_f = float(student_accuracy)
+            except (ValueError, TypeError):
+                accuracy_f = None
+
+        # A GPS fix with a huge reported accuracy circle (common indoors, when the phone
+        # falls back to WiFi/cell-tower positioning) is not trustworthy for an 800m geofence.
+        # Reject it with a clear, actionable message instead of silently comparing noisy
+        # coordinates and confusing the student with a "2km away" error while they're in class.
+        if accuracy_f is not None and accuracy_f > MAX_ACCEPTABLE_ACCURACY_METERS:
+            return jsonify({
+                'error': f'Your device\u2019s location signal is too weak right now (accuracy \u00b1{int(accuracy_f)}m). '
+                         f'Please move near a window/open area, make sure Wi-Fi and GPS are both turned on '
+                         f'(even if not connected to Wi-Fi), wait a few seconds for the location to settle, and scan again.'
+            }), 400
+
+        inside_campus, distance = is_within_campus(student_lat, student_lng, accuracy=accuracy_f)
         if not inside_campus:
             if distance < 0:
                 return jsonify({'error': 'Invalid location data received. Please ensure location is enabled and try scanning again.'}), 400
@@ -1211,6 +1233,7 @@ def mark_student_attendance():
 
         lat_val = float(student_lat)
         lng_val = float(student_lng)
+        dist_val = round(float(distance), 2) if distance >= 0 else 0.0
         # Check if student already marked attendance for this session or subject today
         existing_session = conn.execute('''
             SELECT id, status, subject, session_id FROM attendance 
@@ -1228,9 +1251,9 @@ def mark_student_attendance():
                 try:
                     cursor.execute('''
                         UPDATE attendance 
-                        SET status = 'Present', subject = ?, session_id = ?, time = ?, latitude = ?, longitude = ?, distance_meters = ?, department = ?, class_name = ?, semester = ?
+                        SET status = 'Present', subject = ?, session_id = ?, time = ?, latitude = ?, longitude = ?, distance_meters = ?, accuracy_meters = ?, department = ?, class_name = ?, semester = ?
                         WHERE id = ?
-                    ''', (subject, session_id, time_str, lat_val, lng_val, dist_val, student_dept, student_class, student_sem, existing_session['id']))
+                    ''', (subject, session_id, time_str, lat_val, lng_val, dist_val, accuracy_f, student_dept, student_class, student_sem, existing_session['id']))
                     conn.commit()
                     conn.close()
                     return jsonify({
@@ -1254,16 +1277,12 @@ def mark_student_attendance():
                         pass
                     app.logger.error(f"[Attendance Update Status Error]: {update_err}")
 
-        lat_val = float(student_lat)
-        lng_val = float(student_lng)
-        dist_val = round(float(distance), 2) if distance >= 0 else 0.0
-
         cursor = conn.cursor()
         try:
             cursor.execute('''
-                INSERT INTO attendance (student_id, student_name, roll_no, department, class_name, semester, subject, session_id, date, time, status, latitude, longitude, distance_meters)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Present', ?, ?, ?)
-            ''', (user_id, student_name, roll_no, student_dept, student_class, student_sem, subject, session_id, date_str, time_str, lat_val, lng_val, dist_val))
+                INSERT INTO attendance (student_id, student_name, roll_no, department, class_name, semester, subject, session_id, date, time, status, latitude, longitude, distance_meters, accuracy_meters)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Present', ?, ?, ?, ?)
+            ''', (user_id, student_name, roll_no, student_dept, student_class, student_sem, subject, session_id, date_str, time_str, lat_val, lng_val, dist_val, accuracy_f))
             conn.commit()
         except Exception as insert_err:
             try:
@@ -1289,11 +1308,13 @@ def mark_student_attendance():
                     cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS latitude REAL")
                     cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS longitude REAL")
                     cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS distance_meters REAL")
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS accuracy_meters REAL")
                 else:
                     cursor.execute("ALTER TABLE attendance ADD COLUMN semester TEXT NOT NULL DEFAULT ''")
                     cursor.execute("ALTER TABLE attendance ADD COLUMN latitude REAL")
                     cursor.execute("ALTER TABLE attendance ADD COLUMN longitude REAL")
                     cursor.execute("ALTER TABLE attendance ADD COLUMN distance_meters REAL")
+                    cursor.execute("ALTER TABLE attendance ADD COLUMN accuracy_meters REAL")
                 conn.commit()
                 # Retry insertion
                 cursor.execute('''

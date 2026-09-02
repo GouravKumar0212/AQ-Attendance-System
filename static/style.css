@@ -1178,8 +1178,13 @@ textarea:hover,
 }
 
 /* --------------------------------------------------------------------------
-   11. MOBILE CARDS VIEW (Displayed instead of tables on mobile screens)
+   11. RESPONSIVE VIEWS (Desktop Tables vs Mobile Cards)
    -------------------------------------------------------------------------- */
+.desktop-only {
+    display: block;
+    width: 100%;
+}
+
 .mobile-only-cards {
     display: none;
     flex-direction: column;
@@ -1351,8 +1356,12 @@ textarea:hover,
 
 /* Tablet & Mobile Screens (<= 768px) */
 @media (max-width: 768px) {
+    .desktop-only {
+        display: none !important;
+    }
+
     .mobile-only-cards {
-        display: flex;
+        display: flex !important;
     }
 
     .header-container {
