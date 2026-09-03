@@ -823,24 +823,217 @@ def delete_user(user_id):
     
     return jsonify({'success': True, 'message': 'User deleted successfully.'})
 
-@app.route('/api/admin/sample-users-csv', methods=['GET'])
-def download_sample_users_csv():
+def parse_user_spreadsheet(raw_bytes, filename):
     """
-    Task: Provide a downloadable sample CSV template for bulk user registration.
+    Task: Parse uploaded user spreadsheet (CSV, XLSX, XLS) into (data_rows, fieldnames).
+    Provides native OpenPyXL parsing with zero-dependency XML/Zip fallback for XLSX, and tolerant multi-encoding CSV.
+    """
+    fname_lower = (filename or '').lower()
+    
+    # 1. Handle Excel Spreadsheets (.xlsx, .xls)
+    if fname_lower.endswith(('.xlsx', '.xls')):
+        fieldnames = []
+        data_rows = []
+        parsed_via_openpyxl = False
+
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), data_only=True)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                if not fieldnames:
+                    if row and any(c is not None and str(c).strip() for c in row):
+                        fieldnames = [str(c).strip() if c is not None else '' for c in row]
+                else:
+                    if not row or not any(c is not None and str(c).strip() for c in row):
+                        continue
+                    row_dict = {}
+                    for idx, col_name in enumerate(fieldnames):
+                        if not col_name:
+                            continue
+                        val = row[idx] if idx < len(row) else ''
+                        if val is None:
+                            val_str = ''
+                        elif isinstance(val, float) and val.is_integer():
+                            val_str = str(int(val))
+                        else:
+                            val_str = str(val).strip()
+                        row_dict[col_name] = val_str
+                    data_rows.append(row_dict)
+            parsed_via_openpyxl = True
+        except Exception:
+            parsed_via_openpyxl = False
+
+        # Fallback for .xlsx using Python standard library (zipfile + ElementTree)
+        if not parsed_via_openpyxl and fname_lower.endswith('.xlsx'):
+            import zipfile
+            import xml.etree.ElementTree as ET
+            with zipfile.ZipFile(io.BytesIO(raw_bytes)) as z:
+                shared_strings = []
+                if 'xl/sharedStrings.xml' in z.namelist():
+                    tree = ET.fromstring(z.read('xl/sharedStrings.xml'))
+                    for si in tree.findall('.//{*}si'):
+                        texts = [t.text or '' for t in si.findall('.//{*}t')]
+                        shared_strings.append(''.join(texts))
+                
+                sheet_name = 'xl/worksheets/sheet1.xml'
+                if sheet_name not in z.namelist():
+                    for name in z.namelist():
+                        if name.startswith('xl/worksheets/sheet') and name.endswith('.xml'):
+                            sheet_name = name
+                            break
+                
+                tree = ET.fromstring(z.read(sheet_name))
+                parsed_matrix = []
+                for row_el in tree.findall('.//{*}row'):
+                    row_dict = {}
+                    for c_el in row_el.findall('.//{*}c'):
+                        r_coord = c_el.get('r', '')
+                        col_letter = ''.join(ch for ch in r_coord if ch.isalpha())
+                        t_type = c_el.get('t')
+                        v_el = c_el.find('.//{*}v')
+                        val = ''
+                        if v_el is not None and v_el.text:
+                            if t_type == 's':
+                                try:
+                                    s_idx = int(v_el.text)
+                                    val = shared_strings[s_idx] if s_idx < len(shared_strings) else ''
+                                except (ValueError, IndexError):
+                                    val = v_el.text
+                            else:
+                                val = v_el.text
+                        elif c_el.find('.//{*}is/{*}t') is not None:
+                            val = c_el.find('.//{*}is/{*}t').text or ''
+                        row_dict[col_letter] = val
+                    if row_dict:
+                        parsed_matrix.append(row_dict)
+
+                if parsed_matrix:
+                    col_keys = []
+                    for d in parsed_matrix:
+                        for k in d.keys():
+                            if k not in col_keys:
+                                col_keys.append(k)
+                    col_keys.sort()
+                    
+                    header_dict = parsed_matrix[0]
+                    fieldnames = [header_dict.get(k, '').strip() for k in col_keys]
+                    for d in parsed_matrix[1:]:
+                        r_data = {}
+                        has_val = False
+                        for idx, k in enumerate(col_keys):
+                            col_name = fieldnames[idx] if idx < len(fieldnames) else k
+                            v = d.get(k, '').strip()
+                            if v:
+                                has_val = True
+                            r_data[col_name] = v
+                        if has_val:
+                            data_rows.append(r_data)
+
+        if not fieldnames:
+            raise ValueError("Excel file is empty or missing header columns.")
+        return data_rows, fieldnames
+
+    # 2. Handle CSV file
+    raw_text = None
+    for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
+        try:
+            raw_text = raw_bytes.decode(enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if raw_text is None:
+        raise ValueError("Failed to decode CSV file. Please ensure it is saved with standard UTF-8 or ANSI encoding.")
+
+    stream = io.StringIO(raw_text, newline=None)
+    first_line = stream.readline()
+    stream.seek(0)
+    delimiter = ','
+    if ';' in first_line and first_line.count(';') > first_line.count(','):
+        delimiter = ';'
+    elif '\t' in first_line and first_line.count('\t') > first_line.count(','):
+        delimiter = '\t'
+
+    reader = csv.DictReader(stream, delimiter=delimiter)
+    if not reader.fieldnames:
+        raise ValueError("CSV file is empty or missing header row.")
+    
+    data_rows = list(reader)
+    fieldnames = reader.fieldnames
+    return data_rows, fieldnames
+
+@app.route('/api/admin/sample-users-template', methods=['GET'])
+@app.route('/api/admin/sample-users-csv', methods=['GET'])
+def download_sample_users_template():
+    """
+    Task: Provide downloadable sample template in Excel (.xlsx) or CSV format for bulk user registration.
     """
     if session.get('role') != 'admin':
         return jsonify({'error': 'Unauthorized. Admin access required.'}), 403
 
+    default_fmt = 'csv' if request.path.endswith('sample-users-csv') else 'xlsx'
+    fmt = (request.args.get('format') or default_fmt).lower()
+    headers = ['full_name', 'username', 'password', 'role', 'department', 'class_name', 'semester', 'roll_no', 'email']
+    sample_student = ['Sample Student', 'sample_student_01', 'student123', 'student', 'Computer Science', 'B.Tech CS', 'Semester 1', 'SAMPLE-001', 'sample.student@campus.edu']
+    sample_staff = ['Sample Faculty', 'sample_staff_01', 'staff123', 'staff', 'Computer Science', '', '', '', 'sample.faculty@campus.edu']
+
+    if fmt in ['xlsx', 'excel']:
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Users Import Template"
+            ws.append(headers)
+            ws.append(sample_student)
+            ws.append(sample_staff)
+
+            # Styling for premium user experience
+            header_fill = PatternFill(start_color="1E40AF", end_color="1E40AF", fill_type="solid")
+            header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+            border_thin = Border(
+                left=Side(style='thin', color='CBD5E1'),
+                right=Side(style='thin', color='CBD5E1'),
+                top=Side(style='thin', color='CBD5E1'),
+                bottom=Side(style='thin', color='CBD5E1')
+            )
+
+            for col_idx in range(1, len(headers) + 1):
+                cell = ws.cell(row=1, column=col_idx)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = border_thin
+                # Set reasonable column width
+                col_letter = openpyxl.utils.get_column_letter(col_idx)
+                ws.column_dimensions[col_letter].width = max(len(headers[col_idx - 1]) + 6, 16)
+
+            for row_num in [2, 3]:
+                for col_idx in range(1, len(headers) + 1):
+                    c = ws.cell(row=row_num, column=col_idx)
+                    c.border = border_thin
+                    c.alignment = Alignment(vertical="center")
+
+            output = io.BytesIO()
+            wb.save(output)
+            output.seek(0)
+            return Response(
+                output.getvalue(),
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                headers={
+                    'Content-Disposition': 'attachment; filename=aq_users_sample_template.xlsx',
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                }
+            )
+        except Exception:
+            pass
+
+    # Fallback / explicit CSV output
     output = io.StringIO()
     writer = csv.writer(output)
-    
-    # Header row
-    writer.writerow(['full_name', 'username', 'password', 'role', 'department', 'class_name', 'semester', 'roll_no', 'email'])
-    
-    # Clean example rows with non-colliding example placeholders
-    writer.writerow(['Sample Student', 'sample_student_01', 'student123', 'student', 'Computer Science', 'B.Tech CS', 'Semester 1', 'SAMPLE-001', 'sample.student@campus.edu'])
-    writer.writerow(['Sample Faculty', 'sample_staff_01', 'staff123', 'staff', 'Computer Science', '', '', '', 'sample.faculty@campus.edu'])
-    
+    writer.writerow(headers)
+    writer.writerow(sample_student)
+    writer.writerow(sample_staff)
     output.seek(0)
     return Response(
         output.getvalue(),
@@ -851,58 +1044,40 @@ def download_sample_users_csv():
         }
     )
 
+@app.route('/api/admin/import-users', methods=['POST'])
 @app.route('/api/admin/upload-csv-users', methods=['POST'])
-def bulk_upload_users_csv():
+def bulk_import_users():
     """
-    Task: Bulk upload student and staff user accounts via CSV file with smart Upsert (update existing, insert new).
+    Task: Bulk import student and staff user accounts via Excel (.xlsx, .xls) or CSV with smart Upsert into database.
     """
     if session.get('role') != 'admin':
         return jsonify({'error': 'Unauthorized. Admin access required.'}), 403
 
     if 'file' not in request.files:
-        return jsonify({'error': 'No CSV file uploaded. Please choose a valid .csv file.'}), 400
+        return jsonify({'error': 'No file uploaded. Please choose a valid .xlsx, .xls, or .csv file.'}), 400
 
     file = request.files['file']
     if not file or file.filename == '':
         return jsonify({'error': 'No selected file.'}), 400
 
-    if not (file.filename.lower().endswith('.csv') or file.content_type in ['text/csv', 'application/vnd.ms-excel', 'text/plain', 'application/octet-stream']):
-        return jsonify({'error': 'Invalid file format. Please upload a .csv file.'}), 400
+    fname_lower = file.filename.lower()
+    allowed_exts = ('.xlsx', '.xls', '.csv')
+    if not any(fname_lower.endswith(ext) for ext in allowed_exts):
+        return jsonify({'error': 'Invalid file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.'}), 400
 
-    # 1. Tolerant decoding with fallback encodings
     raw_bytes = file.stream.read()
-    content = None
-    for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
-        try:
-            content = raw_bytes.decode(enc)
-            break
-        except (UnicodeDecodeError, LookupError):
-            continue
-    if content is None:
-        return jsonify({'error': 'Failed to decode CSV file. Please ensure it is saved with standard UTF-8 or ANSI encoding.'}), 400
-
-    # 2. Tolerant delimiter detection (comma, semicolon, tab)
-    stream = io.StringIO(content, newline=None)
-    first_line = stream.readline()
-    stream.seek(0)
-    delimiter = ','
-    if ';' in first_line and first_line.count(';') > first_line.count(','):
-        delimiter = ';'
-    elif '\t' in first_line and first_line.count('\t') > first_line.count(','):
-        delimiter = '\t'
-
     try:
-        reader = csv.DictReader(stream, delimiter=delimiter)
-    except Exception as e:
-        return jsonify({'error': f'Failed to parse CSV file: {str(e)}'}), 400
+        data_rows, fieldnames = parse_user_spreadsheet(raw_bytes, file.filename)
+    except Exception as parse_err:
+        return jsonify({'error': f'Failed to parse file: {str(parse_err)}'}), 400
 
-    if not reader.fieldnames:
-        return jsonify({'error': 'CSV file is empty or missing header row.'}), 400
+    if not fieldnames:
+        return jsonify({'error': 'Uploaded spreadsheet is empty or missing header row.'}), 400
 
-    # 3. Robust header mapping (strip whitespace, symbols, lower-case)
+    # Robust header mapping (strip whitespace, symbols, lower-case)
     import re
     header_map = {}
-    for fn in reader.fieldnames:
+    for fn in fieldnames:
         if not fn:
             continue
         clean_fn = re.sub(r'[^a-z0-9]', '', str(fn).lower())
@@ -926,7 +1101,7 @@ def bulk_upload_users_csv():
             header_map['email'] = fn
 
     if 'full_name' not in header_map:
-        return jsonify({'error': 'CSV must contain at least a "full_name" or "name" column.'}), 400
+        return jsonify({'error': 'Spreadsheet must contain at least a "full_name" or "name" column.'}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -960,7 +1135,7 @@ def bulk_upload_users_csv():
     processed_users = []
 
     row_idx = 1
-    for row in reader:
+    for row in data_rows:
         row_idx += 1
 
         # Check if entire row is empty / whitespace (standard Excel export artifact)

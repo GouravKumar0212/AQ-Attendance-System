@@ -89,9 +89,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const newRoleSelect = document.getElementById('newRole');
     const studentFieldsContainer = document.getElementById('studentFieldsContainer');
 
-    // Bulk CSV Upload Modal Elements (Admin Only)
+    // Import Users Modal Elements (Admin Only - Excel & CSV)
     const bulkUserUploadModal = document.getElementById('bulkUserUploadModal');
-    const openBulkUploadModalBtn = document.getElementById('openBulkUploadModalBtn');
+    const openBulkUploadModalBtn = document.getElementById('openImportUsersModalBtn') || document.getElementById('openBulkUploadModalBtn');
     const closeBulkUploadModalBtn = document.getElementById('closeBulkUploadModalBtn');
     const cancelBulkUploadModalBtn = document.getElementById('cancelBulkUploadModalBtn');
     const bulkCsvUploadForm = document.getElementById('bulkCsvUploadForm');
@@ -99,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const csvDropzone = document.getElementById('csvDropzone');
     const browseCsvBtn = document.getElementById('browseCsvBtn');
     const selectedCsvFileBadge = document.getElementById('selectedCsvFileBadge');
+    const selectedFileIcon = document.getElementById('selectedFileIcon');
     const selectedCsvFileName = document.getElementById('selectedCsvFileName');
     const selectedCsvFileSize = document.getElementById('selectedCsvFileSize');
     const removeSelectedCsvBtn = document.getElementById('removeSelectedCsvBtn');
@@ -311,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Bulk CSV Upload Modal Controller (Admin Only) ---
+    // --- Import Users Modal Controller (Admin Only - Excel & CSV) ---
     function resetBulkUploadModal() {
         if (bulkCsvUploadForm) bulkCsvUploadForm.reset();
         if (bulkCsvFileInput) bulkCsvFileInput.value = '';
@@ -323,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (bulkUploadError) hideError(bulkUploadError);
         if (submitBulkUploadBtn) {
             submitBulkUploadBtn.disabled = false;
-            submitBulkUploadBtn.innerHTML = '<span>Upload & Import Users</span>';
+            submitBulkUploadBtn.innerHTML = '<span>Import Users</span>';
         }
     }
 
@@ -384,22 +385,30 @@ document.addEventListener('DOMContentLoaded', () => {
             const files = e.dataTransfer?.files;
             if (files && files.length > 0) {
                 bulkCsvFileInput.files = files;
-                handleSelectedCsv(files[0]);
+                handleSelectedFile(files[0]);
             }
         });
     }
 
-    function handleSelectedCsv(file) {
+    function handleSelectedFile(file) {
         if (!file) return;
-        if (!file.name.toLowerCase().endsWith('.csv')) {
-            showError(bulkUploadError, 'Please select a valid .csv file.');
+        const fname = file.name.toLowerCase();
+        const isExcel = fname.endsWith('.xlsx') || fname.endsWith('.xls');
+        const isCsv = fname.endsWith('.csv');
+
+        if (!isExcel && !isCsv) {
+            showError(bulkUploadError, 'Please select a valid Excel (.xlsx, .xls) or CSV (.csv) file.');
             return;
         }
         hideError(bulkUploadError);
         if (selectedCsvFileName) selectedCsvFileName.textContent = file.name;
+        if (selectedFileIcon) {
+            selectedFileIcon.textContent = isExcel ? '📗' : '📊';
+        }
         if (selectedCsvFileSize) {
             const sizeKb = (file.size / 1024).toFixed(1);
-            selectedCsvFileSize.textContent = `${sizeKb} KB • Ready to import`;
+            const typeLabel = isExcel ? 'Excel Spreadsheet' : 'CSV Spreadsheet';
+            selectedCsvFileSize.textContent = `${sizeKb} KB • ${typeLabel} • Ready to import`;
         }
         if (selectedCsvFileBadge) selectedCsvFileBadge.classList.remove('hidden');
     }
@@ -407,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (bulkCsvFileInput) {
         bulkCsvFileInput.addEventListener('change', (e) => {
             const file = e.target.files?.[0];
-            if (file) handleSelectedCsv(file);
+            if (file) handleSelectedFile(file);
         });
     }
 
@@ -427,20 +436,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const file = bulkCsvFileInput?.files?.[0];
             if (!file) {
-                showError(bulkUploadError, 'Please select or drop a .csv file to import.');
+                showError(bulkUploadError, 'Please select or drop an Excel (.xlsx, .xls) or CSV (.csv) file to import.');
                 return;
             }
 
             if (submitBulkUploadBtn) {
                 submitBulkUploadBtn.disabled = true;
-                submitBulkUploadBtn.innerHTML = '<span>⏳ Uploading & Importing...</span>';
+                submitBulkUploadBtn.innerHTML = '<span>⏳ Importing Users...</span>';
             }
 
             const formData = new FormData();
             formData.append('file', file);
 
             try {
-                const response = await fetch('/api/admin/upload-csv-users', {
+                const response = await fetch('/api/admin/import-users', {
                     method: 'POST',
                     body: formData
                 });
@@ -483,14 +492,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Reload user directory table and counter badges
                     loadAdminUsers();
                 } else {
-                    showError(bulkUploadError, data.error || 'Failed to process CSV file.');
+                    showError(bulkUploadError, data.error || 'Failed to process spreadsheet.');
                 }
             } catch (err) {
-                showError(bulkUploadError, 'Network error during CSV upload. Please try again.');
+                showError(bulkUploadError, 'Network error during file import. Please try again.');
             } finally {
                 if (submitBulkUploadBtn) {
                     submitBulkUploadBtn.disabled = false;
-                    submitBulkUploadBtn.innerHTML = '<span>Upload & Import Users</span>';
+                    submitBulkUploadBtn.innerHTML = '<span>Import Users</span>';
                 }
             }
         });
