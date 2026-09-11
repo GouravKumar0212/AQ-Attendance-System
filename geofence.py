@@ -30,14 +30,11 @@ def distance_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float
 # perfectly normal, honest reading indoors. Silently trusting the raw lat/lng in that case
 # is what produces the "1.8km away" false rejections even though the phone is on campus.
 
-# Fixes worse than this are effectively useless for an 800m geofence - ask the student to
-# retry instead of silently accepting/rejecting based on noise.
-MAX_ACCEPTABLE_ACCURACY_METERS = 300
+# Fixes with network accuracy (Wi-Fi/cellular) or GPS are supported without rejecting based on accuracy noise.
+MAX_ACCEPTABLE_ACCURACY_METERS = 5000
 
-# How much of the reported accuracy we forgive when checking the boundary. We don't add the
-# *entire* accuracy value to the radius (that would let someone 1km away in through a bad fix),
-# we add a capped fraction of it, biased in the student's favor only near the boundary.
-ACCURACY_BUFFER_CAP_METERS = 150
+# Tolerance buffer for GPS/network accuracy positioning near campus boundary.
+ACCURACY_BUFFER_CAP_METERS = 2500
 
 
 def is_within_campus(lat, lng, radius_meters: float = MAX_RADIUS_METERS, accuracy: float = None) -> tuple[bool, float]:
@@ -45,10 +42,8 @@ def is_within_campus(lat, lng, radius_meters: float = MAX_RADIUS_METERS, accurac
     Task: Validate whether student GPS coordinates are within the college campus geofence boundary.
 
     accuracy: the accuracy (meters) reported by the browser's Geolocation API
-              (position.coords.accuracy), if available. Used to add a small, capped
-              tolerance to the radius so that a slightly noisy-but-honest fix near the
-              boundary isn't rejected, without opening the geofence up wide enough to be
-              gamed from far away.
+              (position.coords.accuracy), if available. Used to add a tolerance to the radius
+              so network accuracy (Wi-Fi/cellular) and GPS fixes near or on campus are accepted.
 
     Returns: (is_inside: bool, distance_in_meters: float).
     """

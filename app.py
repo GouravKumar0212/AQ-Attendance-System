@@ -1514,17 +1514,7 @@ def mark_student_attendance():
             except (ValueError, TypeError):
                 accuracy_f = None
 
-        # A GPS fix with a huge reported accuracy circle (common indoors, when the phone
-        # falls back to WiFi/cell-tower positioning) is not trustworthy for an 800m geofence.
-        # Reject it with a clear, actionable message instead of silently comparing noisy
-        # coordinates and confusing the student with a "2km away" error while they're in class.
-        if accuracy_f is not None and accuracy_f > MAX_ACCEPTABLE_ACCURACY_METERS:
-            return jsonify({
-                'error': f'Your device\u2019s location signal is too weak right now (accuracy \u00b1{int(accuracy_f)}m). '
-                         f'Please move near a window/open area, make sure Wi-Fi and GPS are both turned on '
-                         f'(even if not connected to Wi-Fi), wait a few seconds for the location to settle, and scan again.'
-            }), 400
-
+        # Network accuracy and GPS fixes are accepted without displaying weak signal errors
         inside_campus, distance = is_within_campus(student_lat, student_lng, accuracy=accuracy_f)
         if not inside_campus:
             if distance < 0:

@@ -902,86 +902,129 @@ document.addEventListener('DOMContentLoaded', () => {
                         timestamp: Date.now()
                     };
                     if (!cachedStudentLocation ||
-                        (Date.now() - cachedStudentLocation.timestamp > 20000) ||
+                        (Date.now() - cachedStudentLocation.timestamp > 30000) ||
                         (typeof fix.accuracy === 'number' && fix.accuracy < cachedStudentLocation.accuracy)) {
                         cachedStudentLocation = fix;
                     }
                 },
                 (err) => {
-                    console.warn('GPS pre-warming background fix:', err);
+                    // Suppress pre-warming errors
                 },
-                // enableHighAccuracy asks the device to use GPS (not just WiFi/cell), maximumAge:0
-                // forces a fresh fix each callback instead of the browser silently reusing a stale one.
-                { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+                { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
             );
         } catch (e) {
             console.warn('Location watcher start error:', e);
         }
     };
 
-    // Only trust a fix this precise (meters) or better for an 800m geofence. Anything worse is a
-    // sign the device fell back to WiFi/cell-tower positioning (common indoors) and the raw
-    // coordinates cannot be trusted - the backend independently double-checks this too.
-    const MIN_USABLE_ACCURACY_METERS = 300;
-    // If we don't get anything below MIN_USABLE_ACCURACY_METERS within this budget, just go with
-    // the best fix we've seen rather than blocking the student indefinitely; the backend will still
-    // reject it with a clear message if it's genuinely too imprecise.
-    const LOCATION_SAMPLE_WINDOW_MS = 6000;
-
     const getCurrentLocation = () => {
         return new Promise((resolve, reject) => {
-            // If we already have a warm, sufficiently accurate GPS fix from the last 20s, use it instantly.
-            if (cachedStudentLocation &&
-                (Date.now() - cachedStudentLocation.timestamp < 20000) &&
-                typeof cachedStudentLocation.accuracy === 'number' &&
-                cachedStudentLocation.accuracy <= MIN_USABLE_ACCURACY_METERS) {
+            // If location was already obtained, resolve immediately with zero delay
+            if (cachedStudentLocation && (Date.now() - cachedStudentLocation.timestamp < 60000)) {
                 return resolve({ lat: cachedStudentLocation.lat, lng: cachedStudentLocation.lng, accuracy: cachedStudentLocation.accuracy });
             }
+
             if (!navigator.geolocation) {
-                reject(new Error('Geolocation is not supported by this browser.'));
-                return;
+                const err = new Error('Location services are not supported on this browser.');
+                err.code = 2;
+                return reject(err);
             }
 
-            let best = (cachedStudentLocation && (Date.now() - cachedStudentLocation.timestamp < 20000)) ? cachedStudentLocation : null;
             let settled = false;
-            const finish = (fix, err) => {
+            let sampleWatchId = null;
+
+            const finishSuccess = (fix) => {
                 if (settled) return;
                 settled = true;
-                try { navigator.geolocation.clearWatch(sampleWatchId); } catch (e) { }
+                if (sampleWatchId !== null) {
+                    try { navigator.geolocation.clearWatch(sampleWatchId); } catch (e) { }
+                }
                 if (fix) {
                     cachedStudentLocation = fix;
                     resolve({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
+                } else if (cachedStudentLocation) {
+                    resolve({ lat: cachedStudentLocation.lat, lng: cachedStudentLocation.lng, accuracy: cachedStudentLocation.accuracy });
                 } else {
-                    reject(err || new Error('Could not get a GPS fix. Please make sure location is enabled and try again.'));
+                    const err = new Error('Location is turned off.');
+                    err.code = 2;
+                    reject(err);
                 }
             };
 
-            // Sample real GPS fixes for a short window and keep only the most accurate one, instead
-            // of trusting whichever fix happens to arrive first (which is what caused unreliable
-            // "you're 1.8km away" errors on-campus).
-            const sampleWatchId = navigator.geolocation.watchPosition(
+            const finishError = (err) => {
+                if (settled) return;
+                settled = true;
+                if (sampleWatchId !== null) {
+                    try { navigator.geolocation.clearWatch(sampleWatchId); } catch (e) { }
+                }
+                if (cachedStudentLocation) {
+                    return resolve({ lat: cachedStudentLocation.lat, lng: cachedStudentLocation.lng, accuracy: cachedStudentLocation.accuracy });
+                }
+                reject(err || new Error('Location is turned off.'));
+            };
+
+            // Attempt 1: Get current position with GPS/high-accuracy
+            navigator.geolocation.getCurrentPosition(
                 (pos) => {
-                    const fix = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy, timestamp: Date.now() };
-                    if (!best || (typeof fix.accuracy === 'number' && fix.accuracy < best.accuracy)) {
-                        best = fix;
-                    }
-                    // Good enough - no need to keep waiting.
-                    if (typeof fix.accuracy === 'number' && fix.accuracy <= 50) {
-                        finish(best);
-                    }
+                    const fix = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy,
+                        timestamp: Date.now()
+                    };
+                    finishSuccess(fix);
                 },
                 (err) => {
-                    console.warn('GPS sampling error:', err);
-                    // Deliberately NOT falling back to enableHighAccuracy:false here - that switches
-                    // to WiFi/cell-tower based positioning, which is what produced multi-km errors
-                    // indoors in the first place. If we have any best-so-far fix, use it; otherwise
-                    // let the window run out and report the real error.
-                    if (best) finish(best);
+                    // Only reject if location is actually turned off on device or permission is denied
+                    if (err && (err.code === 1 || err.code === 2)) {
+                        finishError(err);
+                        return;
+                    }
+
+                    // For timeouts or network-based fixes, fallback seamlessly to standard network accuracy
+                    navigator.geolocation.getCurrentPosition(
+                        (fallbackPos) => {
+                            const fix = {
+                                lat: fallbackPos.coords.latitude,
+                                lng: fallbackPos.coords.longitude,
+                                accuracy: fallbackPos.coords.accuracy,
+                                timestamp: Date.now()
+                            };
+                            finishSuccess(fix);
+                        },
+                        (fallbackErr) => {
+                            if (cachedStudentLocation) {
+                                finishSuccess(cachedStudentLocation);
+                            } else {
+                                finishError(fallbackErr);
+                            }
+                        },
+                        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+                    );
                 },
-                { enableHighAccuracy: true, maximumAge: 0, timeout: LOCATION_SAMPLE_WINDOW_MS }
+                { enableHighAccuracy: true, timeout: 3500, maximumAge: 30000 }
             );
 
-            setTimeout(() => finish(best, best ? null : new Error('Location signal too weak. Please move to an open area and try again.')), LOCATION_SAMPLE_WINDOW_MS);
+            // Parallel watch for instantaneous resolution if a fix arrives
+            try {
+                sampleWatchId = navigator.geolocation.watchPosition(
+                    (pos) => {
+                        const fix = {
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude,
+                            accuracy: pos.coords.accuracy,
+                            timestamp: Date.now()
+                        };
+                        finishSuccess(fix);
+                    },
+                    (watchErr) => {
+                        if (watchErr && (watchErr.code === 1 || watchErr.code === 2)) {
+                            finishError(watchErr);
+                        }
+                    },
+                    { enableHighAccuracy: true, maximumAge: 30000, timeout: 5000 }
+                );
+            } catch (e) { }
         });
     };
 
@@ -1459,11 +1502,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 payloadObj.lng = coords.lng;
                 payloadObj.accuracy = coords.accuracy;
             } catch (locErr) {
-                let msg = 'Location access is required to mark attendance. Please enable location and try again.';
+                // Warning is displayed ONLY if location is off or permission is denied
+                let msg = 'Location is turned off. Please turn on location on your device to mark attendance.';
                 if (locErr && locErr.code === 1) {
                     msg = 'Location permission denied. Please allow location access in your browser settings to mark attendance.';
-                } else if (locErr && (locErr.code === 2 || locErr.code === 3 || locErr.code === 8)) {
-                    msg = 'Could not get your location in time. Please try again with GPS/location services turned on.';
+                } else if (locErr && locErr.code === 2) {
+                    msg = 'Location is turned off. Please turn on location/GPS on your device to mark attendance.';
                 }
                 handleScanFailure(msg);
                 return;
