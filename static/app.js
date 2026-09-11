@@ -2121,26 +2121,89 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     function renderStatusOverrideSelect(r) {
-        const s = (r.status || 'Present').toLowerCase();
-        const isP = s.includes('pres') || s === 'p';
-        const isA = s.includes('abs') || s === 'a';
-        const isL = s.includes('leave') || s === 'l';
-        const isH = s.includes('hol') || s === 'h';
+        const s = (r.status || 'Present').trim();
+        const sLower = s.toLowerCase();
+        const isP = sLower.includes('pres') || sLower === 'p';
+        const isA = sLower.includes('abs') || sLower === 'a';
+        const isL = sLower.includes('leave') || sLower === 'l';
+        const isH = sLower.includes('hol') || sLower === 'h';
+
+        let color = '#047857';
+        let bg = 'rgba(16, 185, 129, 0.12)';
+        let border = 'rgba(16, 185, 129, 0.4)';
+        if (isA) {
+            color = '#B91C1C';
+            bg = 'rgba(239, 68, 68, 0.12)';
+            border = 'rgba(239, 68, 68, 0.4)';
+        } else if (isL) {
+            color = '#B45309';
+            bg = 'rgba(245, 158, 11, 0.12)';
+            border = 'rgba(245, 158, 11, 0.4)';
+        } else if (isH) {
+            color = '#6D28D9';
+            bg = 'rgba(139, 92, 246, 0.12)';
+            border = 'rgba(139, 92, 246, 0.4)';
+        }
+
+        const enc = encodeURIComponent(color);
+        const chevronUri = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${enc}' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E`;
 
         return `
-            <select class="status-select-override" data-id="${r.id}" title="Security Override Status (P, A, L, H)" style="padding: 0.25rem 0.5rem; font-weight: 800; border-radius: 6px; border: 1.5px solid var(--color-border); font-size: 0.8rem; cursor: pointer; background: #FFFFFF; color: var(--color-navy-dark);">
-                <option value="Present" ${isP ? 'selected' : ''} style="color: #10B981; font-weight: 700;">🟢 P (Present)</option>
-                <option value="Absent" ${isA ? 'selected' : ''} style="color: #EF4444; font-weight: 700;">🔴 A (Absent)</option>
-                <option value="Leave" ${isL ? 'selected' : ''} style="color: #F59E0B; font-weight: 700;">🟡 L (Leave)</option>
-                <option value="Holiday" ${isH ? 'selected' : ''} style="color: #8B5CF6; font-weight: 700;">🟣 H (Holiday)</option>
+            <select class="status-select-override" data-id="${r.id}" title="Attendance Status - Click to change (Present, Absent, Leave, Holiday)" style="
+                display: inline-block;
+                width: auto !important;
+                min-width: 130px !important;
+                height: 32px !important;
+                min-height: 32px !important;
+                padding: 0.25rem 1.8rem 0.25rem 0.85rem !important;
+                font-size: 0.82rem !important;
+                font-weight: 700 !important;
+                font-family: var(--font-family) !important;
+                color: ${color} !important;
+                background-color: ${bg} !important;
+                background-image: url(&quot;${chevronUri}&quot;) !important;
+                background-repeat: no-repeat !important;
+                background-position: right 0.65rem center !important;
+                background-size: 11px 11px !important;
+                border: 1.5px solid ${border} !important;
+                border-radius: 9999px !important;
+                cursor: pointer;
+                outline: none;
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+                appearance: none;
+                -webkit-appearance: none;
+                -moz-appearance: none;
+            ">
+                <option value="Present" ${isP ? 'selected' : ''} style="color: #047857; background: #FFFFFF; font-weight: 700;">🟢 Present</option>
+                <option value="Absent" ${isA ? 'selected' : ''} style="color: #B91C1C; background: #FFFFFF; font-weight: 700;">🔴 Absent</option>
+                <option value="Leave" ${isL ? 'selected' : ''} style="color: #B45309; background: #FFFFFF; font-weight: 700;">🟡 Leave</option>
+                <option value="Holiday" ${isH ? 'selected' : ''} style="color: #6D28D9; background: #FFFFFF; font-weight: 700;">🟣 Holiday</option>
             </select>
         `;
     }
 
     document.addEventListener('change', async (e) => {
         if (e.target && e.target.classList.contains('status-select-override')) {
-            const attendanceId = e.target.dataset.id;
-            const newStatus = e.target.value;
+            const selectEl = e.target;
+            const attendanceId = selectEl.dataset.id;
+            const newStatus = selectEl.value;
+
+            // Instantly update badge appearance in real-time
+            const sLower = (newStatus || '').toLowerCase();
+            let c = '#047857', b = 'rgba(16, 185, 129, 0.12)', bd = 'rgba(16, 185, 129, 0.4)';
+            if (sLower.includes('abs') || sLower === 'a') {
+                c = '#B91C1C'; b = 'rgba(239, 68, 68, 0.12)'; bd = 'rgba(239, 68, 68, 0.4)';
+            } else if (sLower.includes('leave') || sLower === 'l') {
+                c = '#B45309'; b = 'rgba(245, 158, 11, 0.12)'; bd = 'rgba(245, 158, 11, 0.4)';
+            } else if (sLower.includes('hol') || sLower === 'h') {
+                c = '#6D28D9'; b = 'rgba(139, 92, 246, 0.12)'; bd = 'rgba(139, 92, 246, 0.4)';
+            }
+            selectEl.style.setProperty('color', c, 'important');
+            selectEl.style.setProperty('background-color', b, 'important');
+            selectEl.style.setProperty('border-color', bd, 'important');
+            const enc = encodeURIComponent(c);
+            selectEl.style.setProperty('background-image', `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${enc}' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, 'important');
+
             try {
                 const res = await fetch('/api/attendance/update-status', {
                     method: 'POST',
@@ -2566,10 +2629,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${escapeHtml(r.date)} • ${escapeHtml(r.time)}</td>
                     <td>${renderGpsBadge(r)}</td>
                     <td>
-                        <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-                            ${renderDynamicStatusBadge(r.status)}
-                            ${renderStatusOverrideSelect(r)}
-                        </div>
+                        ${renderStatusOverrideSelect(r)}
                     </td>
                 </tr>
             `).join('');
@@ -2584,7 +2644,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="badge badge-staff">${escapeHtml(r.department)} • ${escapeHtml(r.roll_no)}</span>
                         </div>
                         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;">
-                            ${renderDynamicStatusBadge(r.status)}
                             ${renderStatusOverrideSelect(r)}
                         </div>
                     </div>
