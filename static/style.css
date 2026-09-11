@@ -2128,4 +2128,208 @@ select.status-select-override:focus {
     outline-offset: 1px !important;
 }
 
+/* ==========================================================================
+   ENHANCED SEARCH BAR WITH INTEGRATED SEARCH ACTION BUTTON (ADMIN & STAFF)
+   ========================================================================== */
+.search-box-composite {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    background: #FFFFFF;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-md);
+    transition: var(--transition-fast);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    min-height: 40px;
+    height: 40px;
+    overflow: hidden;
+}
+
+.search-box-composite:focus-within {
+    border-color: var(--color-blue);
+    box-shadow: 0 0 0 3.5px rgba(37, 99, 235, 0.18);
+}
+
+.search-input-inner {
+    display: flex;
+    align-items: center;
+    position: relative;
+    padding-left: 0.75rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.search-box-icon {
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    pointer-events: none;
+    margin-right: 0.35rem;
+}
+
+.search-box-input {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0.35rem 0.5rem 0.35rem 0.15rem !important;
+    font-size: 0.88rem !important;
+    font-family: inherit !important;
+    color: var(--color-text-main) !important;
+    width: 195px;
+    min-width: 130px;
+    min-height: unset !important;
+    height: 100% !important;
+}
+
+.search-box-clear {
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease;
+}
+
+.search-box-clear:hover {
+    color: var(--color-navy-dark);
+}
+
+.search-box-btn {
+    border: none;
+    background: #2563EB;
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 0.84rem;
+    padding: 0 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+    align-self: stretch;
+    white-space: nowrap;
+    border-radius: 0;
+    flex-shrink: 0;
+}
+
+.search-box-btn:hover {
+    background: #1D4ED8;
+}
+
+.search-box-btn:active {
+    transform: scale(0.98);
+}
+
+@media (max-width: 768px) {
+    .search-box-composite {
+        width: 100%;
+    }
+    .search-box-input {
+        width: 100%;
+        flex: 1;
+    }
+}
+
+/* ==========================================================================
+   SCROLLABLE STUDENT LIST & USER DIRECTORY WINDOWS
+   ========================================================================== */
+.table-scroll-container {
+    width: 100%;
+    max-height: 480px;
+    overflow-y: auto !important;
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    scrollbar-width: thin;
+    scrollbar-color: #2563EB #f1f5f9;
+}
+
+.table-scroll-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.table-scroll-container::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 4px;
+    border: 2px solid #f1f5f9;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: #2563EB;
+}
+
+.table-scroll-container thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #f8fafc;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+#staffStudentMobileCardsContainer {
+    max-height: 520px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #2563EB #f1f5f9;
+    padding-right: 4px;
+}
+
+#staffStudentMobileCardsContainer::-webkit-scrollbar {
+    width: 6px;
+}
+
+#staffStudentMobileCardsContainer::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+#staffStudentMobileCardsContainer::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 3px;
+}
+
+/* New User / Student Modal Explicit Scrollbar Window */
+#createUserModal .modal-container {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#createUserModal .modal-body {
+    max-height: calc(90vh - 145px);
+    overflow-y: auto !important;
+    scrollbar-width: thin;
+    scrollbar-color: #2563EB #f1f5f9;
+}
+
+#createUserModal .modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+#createUserModal .modal-body::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+#createUserModal .modal-body::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 4px;
+    border: 1px solid #f1f5f9;
+}
+
+#createUserModal .modal-body::-webkit-scrollbar-thumb:hover {
+    background: #2563EB;
+}
+
+
 

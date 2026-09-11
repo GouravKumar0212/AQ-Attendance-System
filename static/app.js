@@ -215,9 +215,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Admin Live Search Input
+    // Admin Live Search Input & Action Button
+    const userSearchBtn = document.getElementById('userSearchBtn');
+    const userSearchClearBtn = document.getElementById('userSearchClearBtn');
+
     if (userSearchInput) {
-        userSearchInput.addEventListener('input', applyUserFilters);
+        userSearchInput.addEventListener('input', () => {
+            if (userSearchClearBtn) {
+                userSearchClearBtn.classList.toggle('hidden', !userSearchInput.value);
+            }
+            applyUserFilters();
+        });
+        userSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyUserFilters();
+            }
+        });
+    }
+    if (userSearchBtn) {
+        userSearchBtn.addEventListener('click', applyUserFilters);
+    }
+    if (userSearchClearBtn) {
+        userSearchClearBtn.addEventListener('click', () => {
+            if (userSearchInput) {
+                userSearchInput.value = '';
+                userSearchClearBtn.classList.add('hidden');
+                userSearchInput.focus();
+                applyUserFilters();
+            }
+        });
     }
 
     function applyUserFilters() {
@@ -720,13 +747,39 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Staff Department Students Controller (with Semester Filter & Search) ---
     const staffStudentSemesterFilter = document.getElementById('staffStudentSemesterFilter');
     const staffStudentSearchInput = document.getElementById('staffStudentSearchInput');
+    const staffStudentSearchBtn = document.getElementById('staffStudentSearchBtn');
+    const staffStudentSearchClearBtn = document.getElementById('staffStudentSearchClearBtn');
     const staffStudentCountBadge = document.getElementById('staffStudentCountBadge');
 
     if (staffStudentSemesterFilter) {
         staffStudentSemesterFilter.addEventListener('change', () => fetchStaffDepartmentStudents());
     }
     if (staffStudentSearchInput) {
-        staffStudentSearchInput.addEventListener('input', () => fetchStaffDepartmentStudents());
+        staffStudentSearchInput.addEventListener('input', () => {
+            if (staffStudentSearchClearBtn) {
+                staffStudentSearchClearBtn.classList.toggle('hidden', !staffStudentSearchInput.value);
+            }
+            fetchStaffDepartmentStudents();
+        });
+        staffStudentSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                fetchStaffDepartmentStudents();
+            }
+        });
+    }
+    if (staffStudentSearchBtn) {
+        staffStudentSearchBtn.addEventListener('click', () => fetchStaffDepartmentStudents());
+    }
+    if (staffStudentSearchClearBtn) {
+        staffStudentSearchClearBtn.addEventListener('click', () => {
+            if (staffStudentSearchInput) {
+                staffStudentSearchInput.value = '';
+                staffStudentSearchClearBtn.classList.add('hidden');
+                staffStudentSearchInput.focus();
+                fetchStaffDepartmentStudents();
+            }
+        });
     }
 
     async function fetchStaffDepartmentStudents() {
@@ -2038,8 +2091,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (staffAttendanceDeptFilter) staffAttendanceDeptFilter.addEventListener('change', fetchStaffAttendance);
     if (staffAttendanceDateFilter) staffAttendanceDateFilter.addEventListener('change', fetchStaffAttendance);
-    if (staffAttendanceSemesterFilter) staffAttendanceSemesterFilter.addEventListener('change', fetchStaffAttendance);
-    if (staffAttendanceSubjectFilter) staffAttendanceSubjectFilter.addEventListener('input', fetchStaffAttendance);
+    const staffAttendanceSearchBtn = document.getElementById('staffAttendanceSearchBtn');
+    const staffAttendanceClearBtn = document.getElementById('staffAttendanceClearBtn');
+
+    if (staffAttendanceSubjectFilter) {
+        staffAttendanceSubjectFilter.addEventListener('input', () => {
+            if (staffAttendanceClearBtn) {
+                staffAttendanceClearBtn.classList.toggle('hidden', !staffAttendanceSubjectFilter.value);
+            }
+            fetchStaffAttendance();
+        });
+        staffAttendanceSubjectFilter.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                fetchStaffAttendance();
+            }
+        });
+    }
+    if (staffAttendanceSearchBtn) {
+        staffAttendanceSearchBtn.addEventListener('click', fetchStaffAttendance);
+    }
+    if (staffAttendanceClearBtn) {
+        staffAttendanceClearBtn.addEventListener('click', () => {
+            if (staffAttendanceSubjectFilter) {
+                staffAttendanceSubjectFilter.value = '';
+                staffAttendanceClearBtn.classList.add('hidden');
+                staffAttendanceSubjectFilter.focus();
+                fetchStaffAttendance();
+            }
+        });
+    }
 
     if (staffFromDateFilter) staffFromDateFilter.addEventListener('change', fetchStaffAttendance);
     if (staffToDateFilter) staffToDateFilter.addEventListener('change', fetchStaffAttendance);
@@ -2504,8 +2585,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (adminDeptFilter) adminDeptFilter.addEventListener('change', fetchAdminAttendance);
     if (adminDateFilter) adminDateFilter.addEventListener('change', fetchAdminAttendance);
-    if (adminSemesterFilter) adminSemesterFilter.addEventListener('change', fetchAdminAttendance);
-    if (adminAttendanceSearch) adminAttendanceSearch.addEventListener('input', fetchAdminAttendance);
+    const adminAttendanceSearchBtn = document.getElementById('adminAttendanceSearchBtn');
+    const adminAttendanceClearBtn = document.getElementById('adminAttendanceClearBtn');
+
+    if (adminAttendanceSearch) {
+        adminAttendanceSearch.addEventListener('input', () => {
+            if (adminAttendanceClearBtn) {
+                adminAttendanceClearBtn.classList.toggle('hidden', !adminAttendanceSearch.value);
+            }
+            fetchAdminAttendance();
+        });
+        adminAttendanceSearch.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                fetchAdminAttendance();
+            }
+        });
+    }
+    if (adminAttendanceSearchBtn) {
+        adminAttendanceSearchBtn.addEventListener('click', fetchAdminAttendance);
+    }
+    if (adminAttendanceClearBtn) {
+        adminAttendanceClearBtn.addEventListener('click', () => {
+            if (adminAttendanceSearch) {
+                adminAttendanceSearch.value = '';
+                adminAttendanceClearBtn.classList.add('hidden');
+                adminAttendanceSearch.focus();
+                fetchAdminAttendance();
+            }
+        });
+    }
 
     if (adminFromDateFilter) adminFromDateFilter.addEventListener('change', fetchAdminAttendance);
     if (adminToDateFilter) adminToDateFilter.addEventListener('change', fetchAdminAttendance);

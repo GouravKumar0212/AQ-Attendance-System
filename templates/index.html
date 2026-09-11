@@ -239,20 +239,36 @@
                         <p class="subtitle">Search, filter, or manage user accounts</p>
                     </div>
 
-                    <div class="table-actions">
+                    <div class="table-actions" style="flex-wrap: wrap; gap: 0.75rem; align-items: center;">
                         <!-- Quick Role Filter Pills -->
                         <div class="filter-pills">
                             <button class="filter-pill active" data-filter="all">All</button>
                             <button class="filter-pill" data-filter="staff">Staff</button>
                             <button class="filter-pill" data-filter="student">Students</button>
                         </div>
-                        <input type="text" id="userSearchInput" placeholder="🔍 Search name, roll no, department..."
-                            class="search-input">
+                        <div class="search-box-composite">
+                            <div class="search-input-inner">
+                                <svg class="search-box-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" id="userSearchInput" placeholder="Search name, roll no, department..."
+                                    class="search-box-input">
+                                <button type="button" id="userSearchClearBtn" class="search-box-clear hidden" title="Clear search">&times;</button>
+                            </div>
+                            <button type="button" id="userSearchBtn" class="search-box-btn" title="Search users">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <span>Search</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Desktop Table View -->
-                <div class="table-responsive desktop-only">
+                <div class="table-responsive table-scroll-container desktop-only">
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -349,9 +365,24 @@
 
                         </select>
 
-                        <input type="text" id="adminAttendanceSearch"
-                            placeholder="🔍 Search student, roll no, subject..." class="search-input"
-                            style="padding: 0.45rem 0.75rem;">
+                        <div class="search-box-composite">
+                            <div class="search-input-inner">
+                                <svg class="search-box-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" id="adminAttendanceSearch"
+                                    placeholder="Search student, roll no..." class="search-box-input">
+                                <button type="button" id="adminAttendanceClearBtn" class="search-box-clear hidden" title="Clear search">&times;</button>
+                            </div>
+                            <button type="button" id="adminAttendanceSearchBtn" class="search-box-btn" title="Search attendance">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <span>Search</span>
+                            </button>
+                        </div>
 
                         <!-- Action Buttons & Advanced Filter Toggle -->
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -657,15 +688,31 @@
 
                         </select>
 
-                        <input type="text" id="staffStudentSearchInput" placeholder="🔍 Search name, roll no..."
-                            class="search-input" style="padding: 0.45rem 0.75rem;">
+                        <div class="search-box-composite">
+                            <div class="search-input-inner">
+                                <svg class="search-box-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" id="staffStudentSearchInput" placeholder="Search name, roll no..."
+                                    class="search-box-input">
+                                <button type="button" id="staffStudentSearchClearBtn" class="search-box-clear hidden" title="Clear search">&times;</button>
+                            </div>
+                            <button type="button" id="staffStudentSearchBtn" class="search-box-btn" title="Search students">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <span>Search</span>
+                            </button>
+                        </div>
 
                         <span id="staffStudentCountBadge" class="badge badge-staff" style="font-weight: 700;">0
                             Students</span>
                     </div>
                 </div>
 
-                <div class="table-responsive desktop-only">
+                <div class="table-responsive table-scroll-container desktop-only">
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -732,9 +779,24 @@
                             <option value="Semester 6">Semester 6</option>
                         </select>
 
-                        <input type="text" id="staffAttendanceSubjectFilter"
-                            placeholder="🔍 Search student, roll no, subject..." class="search-input"
-                            style="padding: 0.45rem 0.75rem;">
+                        <div class="search-box-composite">
+                            <div class="search-input-inner">
+                                <svg class="search-box-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" id="staffAttendanceSubjectFilter"
+                                    placeholder="Search student, roll no..." class="search-box-input">
+                                <button type="button" id="staffAttendanceClearBtn" class="search-box-clear hidden" title="Clear search">&times;</button>
+                            </div>
+                            <button type="button" id="staffAttendanceSearchBtn" class="search-box-btn" title="Search attendance">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <span>Search</span>
+                            </button>
+                        </div>
 
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                             <button type="button" id="toggleStaffAdvFiltersBtn" class="btn btn-secondary"
