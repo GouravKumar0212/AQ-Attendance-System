@@ -319,8 +319,8 @@
                             <line x1="12" y1="9" x2="12" y2="13" />
                             <line x1="12" y1="17" x2="12.01" y2="17" />
                         </svg>
-                        <span>🚨 Critical Attendance Alert: <span id="adminLowAttendanceCount">0</span> Student(s) below
-                            45% minimum threshold!</span>
+                        <span>🚨 MLSU Attendance Shortage Alert: <span id="adminLowAttendanceCount">0</span> Student(s) below
+                            75% minimum requirement (&lt; 65% Debarred)!</span>
                     </div>
                 </div>
                 <div id="adminLowAttendanceList"
@@ -500,12 +500,9 @@
                             <select id="adminThresholdFilter" class="search-input"
                                 style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
                                 <option value="all">All Attendance Rates</option>
-                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage
-                                    (&lt; 45%)</option>
-                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Warning Zone (45% -
-                                    74%)</option>
-                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Good Standing (&ge;
-                                    75%)</option>
+                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage (&lt; 65% - Debarred)</option>
+                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Condonation Zone (65% - 74%)</option>
+                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Eligible / Good Standing (&ge; 75%)</option>
                             </select>
                         </div>
                     </div>
@@ -925,12 +922,9 @@
                             <select id="staffThresholdFilter" class="search-input"
                                 style="width: 100%; padding: 0.4rem 0.6rem; font-weight: 600;">
                                 <option value="all">All Attendance Rates</option>
-                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage
-                                    (&lt; 45%)</option>
-                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Warning Zone (45% -
-                                    74%)</option>
-                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Good Standing (&ge;
-                                    75%)</option>
+                                <option value="critical" style="color: #DC2626; font-weight: 700;">🚨 Critical Shortage (&lt; 65% - Debarred)</option>
+                                <option value="warning" style="color: #D97706; font-weight: 700;">🟡 Condonation Zone (65% - 74%)</option>
+                                <option value="good" style="color: #059669; font-weight: 700;">🟢 Eligible / Good Standing (&ge; 75%)</option>
                             </select>
                         </div>
                     </div>
@@ -1105,12 +1099,11 @@
                         <line x1="12" y1="17" x2="12.01" y2="17" />
                     </svg>
                     <div>
-                        <h4 style="font-size: 1.05rem; font-weight: 800; color: #991B1B; margin-bottom: 0.2rem;">⚠️
-                            Attendance Shortage Warning (&lt; 45%)</h4>
+                        <h4 style="font-size: 1.05rem; font-weight: 800; color: #991B1B; margin-bottom: 0.2rem;" id="studentShortageAlertTitle">⚠️
+                            MLSU Attendance Shortage Warning (&lt; 75%)</h4>
                         <p style="font-size: 0.88rem; margin: 0; line-height: 1.4;">
-                            Your current monthly attendance is <strong id="studentLowAttPct">0.0%</strong>, which is
-                            below the mandatory <strong>45% threshold</strong>. Please attend upcoming classes
-                            immediately to avoid academic shortage penalties.
+                            Your current attendance is <strong id="studentLowAttPct">0.0%</strong>, which is
+                            below the MLSU mandatory <strong>75% examination eligibility requirement</strong>. Students with attendance below <strong>65%</strong> are strictly debarred from appearing in semester examinations under university regulations.
                         </p>
                     </div>
                 </div>

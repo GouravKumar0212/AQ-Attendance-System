@@ -1882,67 +1882,84 @@ document.addEventListener('DOMContentLoaded', () => {
         const studentStatusRatingCard = document.getElementById('studentStatusRating');
 
         // 1. Calculate Yearly / Overall Attendance across ALL logged student records
+        // MLSU Standard Formula: Total Classes Delivered = Present + Absent + Leave
         let yearlyPresent = 0;
         let yearlyAbsent = 0;
+        let yearlyLeave = 0;
+        let yearlyHoliday = 0;
         (studentAllRecords || []).forEach(r => {
             const st = (r.status || '').trim().toLowerCase();
             if (st === 'present' || st === 'p' || st.startsWith('pres')) yearlyPresent++;
             else if (st.includes('abs') || st === 'a') yearlyAbsent++;
+            else if (st.includes('leave') || st === 'l') yearlyLeave++;
+            else if (st.includes('hol') || st === 'h') yearlyHoliday++;
         });
 
-        const yearlyWorking = yearlyPresent + yearlyAbsent;
+        const yearlyWorking = yearlyPresent + yearlyAbsent + yearlyLeave;
         const yearlyRateVal = yearlyWorking > 0 ? (yearlyPresent / yearlyWorking) * 100 : 0;
         const yearlyRateStr = yearlyRateVal % 1 === 0 ? yearlyRateVal.toFixed(0) + '%' : yearlyRateVal.toFixed(1) + '%';
 
         // 2. Calculate Monthly Attendance for the active calendar month
-        const monthlyWorking = countP + countA;
+        // MLSU Standard: Total Classes Delivered = Present + Absent + Leave
+        const monthlyWorking = countP + countA + countL;
         const monthlyRateVal = monthlyWorking > 0 ? (countP / monthlyWorking) * 100 : 0;
         const monthlyRateStr = monthlyRateVal % 1 === 0 ? monthlyRateVal.toFixed(0) + '%' : monthlyRateVal.toFixed(1) + '%';
 
         // Update Total Attended Count (Strictly matches verified Present attendance records)
         if (totalAttendedEl) totalAttendedEl.textContent = yearlyPresent;
 
-        // Update Monthly Attendance Badge
+        // Update Monthly Attendance Badge (MLSU: >=75% Green, 65-74% Yellow, <65% Red)
         if (monthlyBadgeEl) {
             monthlyBadgeEl.textContent = monthlyWorking > 0 ? monthlyRateStr : '0%';
-            monthlyBadgeEl.style.color = monthlyRateVal >= 75 ? '#10B981' : (monthlyRateVal >= 45 ? '#F59E0B' : '#EF4444');
+            monthlyBadgeEl.style.color = monthlyRateVal >= 75 ? '#10B981' : (monthlyRateVal >= 65 ? '#F59E0B' : '#EF4444');
         }
         if (legacyPctBadge) {
             legacyPctBadge.textContent = monthlyWorking > 0 ? monthlyRateStr : yearlyRateStr;
         }
 
-        // Update Yearly Attendance Badge
+        // Update Yearly Attendance Badge (MLSU: >=75% Green, 65-74% Yellow, <65% Red)
         if (yearlyBadgeEl) {
             yearlyBadgeEl.textContent = yearlyWorking > 0 ? yearlyRateStr : '0%';
-            yearlyBadgeEl.style.color = yearlyRateVal >= 75 ? '#10B981' : (yearlyRateVal >= 45 ? '#F59E0B' : '#EF4444');
+            yearlyBadgeEl.style.color = yearlyRateVal >= 75 ? '#10B981' : (yearlyRateVal >= 65 ? '#F59E0B' : '#EF4444');
         }
 
-        // Determine Effective Rate for Eligibility Status & Shortage Alert (Overall Cumulative Standing)
+        // Determine Effective Rate for Eligibility Status & Shortage Alert under MLSU Criteria
         const hasYearlyData = yearlyWorking > 0;
         const effectiveRate = hasYearlyData ? yearlyRateVal : (monthlyWorking > 0 ? monthlyRateVal : 100);
         const effectiveRateStr = hasYearlyData ? yearlyRateStr : (monthlyWorking > 0 ? monthlyRateStr : '100%');
-        const isShortage = effectiveRate < 45.0 && ((hasYearlyData && yearlyWorking >= 3) || monthlyWorking >= 5);
+        const hasMinClasses = (hasYearlyData && yearlyWorking >= 3) || monthlyWorking >= 5;
+        const isDebarred = effectiveRate < 65.0 && hasMinClasses;
+        const isCondonation = effectiveRate >= 65.0 && effectiveRate < 75.0 && hasMinClasses;
+        const isShortage = (effectiveRate < 75.0) && hasMinClasses;
 
         const updateStatusRatingUI = (htmlContent) => {
             if (statusRatingEl) statusRatingEl.innerHTML = htmlContent;
             if (studentStatusRatingCard) studentStatusRatingCard.innerHTML = htmlContent;
         };
 
-        if (isShortage) {
-            updateStatusRatingUI('<span style="color: #EF4444;">🚨 Shortage (&lt;45%)</span>');
+        if (isDebarred) {
+            updateStatusRatingUI('<span style="color: #EF4444; font-weight: 800;">🚨 Debarred (&lt;65%)</span>');
+        } else if (isCondonation) {
+            updateStatusRatingUI('<span style="color: #F59E0B; font-weight: 800;">🟡 Condonation (65%-74%)</span>');
         } else if (effectiveRate >= 75) {
-            updateStatusRatingUI('<span style="color: #10B981;">🟢 Good</span>');
+            updateStatusRatingUI('<span style="color: #10B981; font-weight: 800;">🟢 Eligible (&ge;75%)</span>');
         } else {
-            updateStatusRatingUI('<span style="color: #F59E0B;">🟡 Warning</span>');
+            updateStatusRatingUI('<span style="color: #F59E0B; font-weight: 800;">🟡 In Progress</span>');
         }
 
-        // Student Low Attendance Warning Alert (< 45%)
+        // Student Low Attendance Warning Alert (< 75% as per MLSU)
         const studentAlertBox = document.getElementById('studentLowAttendanceAlert');
         const studentLowPctEl = document.getElementById('studentLowAttPct');
+        const studentShortageAlertTitle = document.getElementById('studentShortageAlertTitle');
         if (studentAlertBox) {
             if (isShortage) {
                 studentAlertBox.classList.remove('hidden');
                 if (studentLowPctEl) studentLowPctEl.textContent = effectiveRateStr;
+                if (studentShortageAlertTitle) {
+                    studentShortageAlertTitle.textContent = isDebarred 
+                        ? '🚨 MLSU Critical Attendance Shortage: Debarred (< 65%)' 
+                        : '⚠️ MLSU Attendance Shortage Warning (< 75% Requirement)';
+                }
             } else {
                 studentAlertBox.classList.add('hidden');
             }
@@ -2713,12 +2730,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (lowStudents.length > 0) {
                     alertBox.classList.remove('hidden');
                     alertCount.textContent = lowStudents.length;
-                    alertList.innerHTML = lowStudents.map(s => `
-                        <div style="background: #FFF; border: 1px solid #FCA5A5; border-radius: 6px; padding: 0.35rem 0.65rem; color: #991B1B; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem;">
-                            <span>🚨 ${escapeHtml(s.student_name)} (${escapeHtml(s.roll_no)})</span>
-                            <span style="background: #DC2626; color: #FFF; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem;">${s.attendance_pct}%</span>
-                        </div>
-                    `).join('');
+                    alertList.innerHTML = lowStudents.map(s => {
+                        const isCrit = s.attendance_pct < 65.0;
+                        const badgeColor = isCrit ? '#DC2626' : '#D97706';
+                        const label = isCrit ? 'Debarred' : 'Condonation Zone';
+                        return `
+                            <div style="background: #FFF; border: 1px solid ${isCrit ? '#FCA5A5' : '#FDE68A'}; border-radius: 6px; padding: 0.35rem 0.65rem; color: ${isCrit ? '#991B1B' : '#92400E'}; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem;">
+                                <span>${isCrit ? '🚨' : '⚠️'} ${escapeHtml(s.student_name)} (${escapeHtml(s.roll_no)})</span>
+                                <span style="background: ${badgeColor}; color: #FFF; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem;">${s.attendance_pct}% • ${label}</span>
+                            </div>
+                        `;
+                    }).join('');
                 } else {
                     alertBox.classList.add('hidden');
                 }

@@ -2041,11 +2041,13 @@ def get_admin_attendance():
 
     low_attendance_students = []
     for sid, stat in student_stats.items():
-        total_working = stat['present_count'] + stat['absent_count']
+        # MLSU Attendance Ordinance: Total lectures/classes delivered = Present + Absent + Leave
+        total_working = stat['present_count'] + stat['absent_count'] + stat['leave_count']
         pct = round((stat['present_count'] / total_working) * 100, 1) if total_working > 0 else 100.0
         stat['total_working'] = total_working
         stat['attendance_pct'] = pct
-        if pct < 45.0:
+        # Under MLSU ordinances: < 75% is attendance shortage, < 65% is strictly debarred
+        if pct < 75.0:
             low_attendance_students.append(stat)
 
     threshold = request.args.get('threshold', '').strip().lower()
@@ -2055,9 +2057,9 @@ def get_admin_attendance():
             sid = r.get('student_id') or r.get('roll_no')
             stat = student_stats.get(sid)
             pct = stat['attendance_pct'] if stat else 100.0
-            if threshold == 'critical' and pct < 45.0:
+            if threshold == 'critical' and pct < 65.0:
                 filtered_records.append(r)
-            elif threshold == 'warning' and 45.0 <= pct < 75.0:
+            elif threshold == 'warning' and 65.0 <= pct < 75.0:
                 filtered_records.append(r)
             elif threshold == 'good' and pct >= 75.0:
                 filtered_records.append(r)
@@ -2166,8 +2168,7 @@ def share_attendance_email():
     present_count = sum(1 for r in records if (r.get('status') or '').lower().startswith('pres') or (r.get('status') or '').lower() == 'p')
     absent_count = sum(1 for r in records if (r.get('status') or '').lower().startswith('abs') or (r.get('status') or '').lower() == 'a')
     leave_count = sum(1 for r in records if (r.get('status') or '').lower().startswith('leave') or (r.get('status') or '').lower() == 'l')
-    holiday_count = sum(1 for r in records if (r.get('status') or '').lower().startswith('hol') or (r.get('status') or '').lower() == 'h')
-    working_total = present_count + absent_count
+    working_total = present_count + absent_count + leave_count
     attendance_rate = round((present_count / working_total * 100), 1) if working_total > 0 else (100.0 if total_records > 0 else 0.0)
 
     dept_label = data.get('department', '').strip() or staff_dept or 'All Departments'
