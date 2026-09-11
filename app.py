@@ -266,7 +266,11 @@ class PgConnWrapper:
         self.raw_conn.rollback()
 
     def close(self):
-        self.raw_conn.close()
+        try:
+            if self.raw_conn:
+                self.raw_conn.close()
+        except Exception:
+            pass
 
 
 def get_db_path():
@@ -1527,10 +1531,18 @@ def mark_student_attendance():
         subject = str(data.get('subject', '')).strip() or 'Classroom Attendance'
         class_name = str(data.get('class', '') or data.get('class_name', '')).strip()
         department = str(data.get('department', '')).strip()
+        # Determine accurate attendance time & date
+        # Priority 1: Exact client device time when attendance was marked
+        # Priority 2: Indian Standard Time (IST: UTC+5:30)
         import datetime
-        now = datetime.datetime.now()
-        date_str = str(data.get('date', '')).strip() or now.strftime('%Y-%m-%d')
-        time_str = str(data.get('time', '')).strip() or now.strftime('%I:%M:%S %p')
+        IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        now_ist = datetime.datetime.now(IST)
+
+        client_date = str(data.get('client_date') or data.get('date') or '').strip()
+        client_time = str(data.get('client_time') or data.get('time') or '').strip()
+
+        date_str = client_date if client_date else now_ist.strftime('%Y-%m-%d')
+        time_str = client_time if client_time else now_ist.strftime('%I:%M:%S %p')
 
         if not session_id:
             import time
@@ -1838,7 +1850,8 @@ def update_attendance_status():
             student = conn.execute('SELECT id, full_name, roll_no, department, class_name, semester FROM users WHERE id = ?', (student_id,)).fetchone()
             if student:
                 import datetime
-                now_time = datetime.datetime.now().strftime('%I:%M:%S %p')
+                IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+                now_time = datetime.datetime.now(IST).strftime('%I:%M:%S %p')
                 cursor.execute('''
                     INSERT INTO attendance (student_id, student_name, roll_no, department, class_name, semester, subject, session_id, date, time, status)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

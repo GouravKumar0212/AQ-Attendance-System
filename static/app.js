@@ -1566,6 +1566,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            // Capture EXACT local device time & date when attendance is marked
+            const markTime = new Date();
+            const timeStr = markTime.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+            const year = markTime.getFullYear();
+            const month = String(markTime.getMonth() + 1).padStart(2, '0');
+            const day = String(markTime.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+
+            payloadObj.client_time = timeStr;
+            payloadObj.client_date = dateStr;
+            payloadObj.time = timeStr;
+            payloadObj.date = dateStr;
+
             try {
                 const res = await fetch('/api/student/mark-attendance', {
                     method: 'POST',
